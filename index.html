@@ -89,7 +89,7 @@
 <div id="screen-wrap">
   <canvas id="scope"></canvas>
   <div id="screen-label">● SYNTH</div>
-  <div id="mic-warn">HTTPS NEEDED</div>
+  <div id="mic-warn"></div>
 </div>
 
 <!-- Controls -->
@@ -315,10 +315,7 @@ let analyser = null, micBuf = null, stream = null, actx = null;
 
 async function startMic() {
   try {
-    stream = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
-      video: false
-    });
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     actx = new (window.AudioContext || window.webkitAudioContext)();
     if (actx.state === "suspended") await actx.resume();
     analyser = actx.createAnalyser();
@@ -330,10 +327,18 @@ async function startMic() {
     updateMicUI(true);
     return true;
   } catch(e) {
-    console.warn("Mic:", e);
+    console.warn("Mic error:", e.name, e.message);
     state.micOk = false;
     updateMicUI(false);
-    document.getElementById("mic-warn").style.display = "block";
+    const warn = document.getElementById("mic-warn");
+    warn.style.display = "block";
+    if (e.name === "NotAllowedError") {
+      warn.textContent = "MIC DENIED — allow in Safari settings";
+    } else if (e.name === "NotFoundError") {
+      warn.textContent = "NO MIC FOUND";
+    } else {
+      warn.textContent = e.name + ": " + e.message;
+    }
     return false;
   }
 }
