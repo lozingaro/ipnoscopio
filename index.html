@@ -5,435 +5,951 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>DIDASCOPE</title>
 <style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  :root {
-    --green: #39ff14;
-    --green-a: rgba(57,255,20,0.15);
-    --blue: #00cfff;
-    --yellow: #ffdd00;
-    --bg: #0a0a0a;
-    --panel: #111;
-    --border: #1e1e1e;
-  }
-  html, body { height: 100%; background: var(--bg); color: var(--green); font-family: monospace; }
-  body { display: flex; flex-direction: column; padding: 12px 12px 28px; gap: 10px; min-height: 100dvh; overflow-x: hidden; }
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
 
-  /* header */
-  #header { display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
-  #title { font-size: 14px; letter-spacing: 4px; font-weight: 700; }
-  #subtitle { font-size: 8px; letter-spacing: 3px; color: #333; margin-left: 10px; }
-  #leds { display: flex; gap: 8px; align-items: center; }
-  .led-group { display: flex; gap: 4px; align-items: center; }
-  .led { width: 6px; height: 6px; border-radius: 50%; background: #1a1a1a; transition: all .3s; }
-  .led-label { font-size: 8px; letter-spacing: 1px; color: #333; }
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-  /* screen */
-  #screen-wrap { background: #000; border-radius: 8px; padding: 4px; box-shadow: 0 0 0 1px #1a1a1a; position: relative; flex-shrink: 0; }
-  canvas { display: block; width: 100%; height: clamp(160px, 35vw, 300px); border-radius: 4px; }
-  #screen-label { position: absolute; top: 8px; left: 10px; font-size: 9px; letter-spacing: 3px; opacity: .5; }
-  #mic-warn { position: absolute; top: 8px; right: 10px; font-size: 9px; letter-spacing: 1px; color: #ff4444; display: none; }
+:root {
+  --black: #000;
+  --white: #fff;
+  --yellow: #FFE600;
+  --red: #E8001D;
+  --cyan: #00B4D8;
+  --green: #39ff14;
+  --bg: #f0e8c8; /* carta da giornale ingiallita */
+  --ink: #1a1a1a;
+  --border: 3px solid #1a1a1a;
+  --shadow: 4px 4px 0 #1a1a1a;
+}
 
-  /* controls */
-  #controls { display: flex; flex-direction: column; gap: 12px; overflow-y: auto; flex: 1; }
+html, body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: 'Press Start 2P', 'Courier New', monospace;
+  font-size: 10px;
+}
 
-  .section-label { font-size: 9px; letter-spacing: 4px; color: #333; margin-bottom: 2px; }
+body {
+  display: flex;
+  flex-direction: column;
+  padding: 10px 10px 28px;
+  gap: 8px;
+  min-height: 100dvh;
+  overflow-x: hidden;
+  /* notebook lines */
+  background-image: repeating-linear-gradient(
+    transparent, transparent 23px,
+    rgba(0,0,80,0.08) 24px
+  );
+}
 
-  /* tab bar */
-  .tabbar { display: flex; border-radius: 6px; overflow: hidden; border: 1px solid #2a2a2a; }
-  .tabbar button { flex: 1; background: transparent; color: #555; border: none; border-right: 1px solid #1a1a1a; padding: 9px 4px; cursor: pointer; font-size: 11px; letter-spacing: 1px; font-family: monospace; transition: all .15s; -webkit-tap-highlight-color: transparent; }
-  .tabbar button:last-child { border-right: none; }
-  .tabbar button.active-synth { background: rgba(57,255,20,0.12); color: var(--green); box-shadow: inset 0 -2px 0 var(--green); font-weight: 700; }
-  .tabbar button.active-mic  { background: rgba(0,207,255,0.12); color: var(--blue);  box-shadow: inset 0 -2px 0 var(--blue);  font-weight: 700; }
+/* ── HEADER ── */
+#header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  border: var(--border);
+  background: var(--yellow);
+  box-shadow: var(--shadow);
+  padding: 8px 10px;
+}
 
-  /* waveform pills */
-  #wave-row { display: flex; gap: 4px; }
-  .wave-btn { flex: 1; background: transparent; color: #444; border: 1px solid #2a2a2a; border-radius: 4px; padding: 8px 0; cursor: pointer; font-size: 10px; font-family: monospace; transition: all .1s; -webkit-tap-highlight-color: transparent; }
-  .wave-btn.active { background: rgba(57,255,20,0.15); color: var(--green); border-color: var(--green); box-shadow: 0 0 6px rgba(57,255,20,.2); }
+#title {
+  font-size: 13px;
+  color: var(--ink);
+  line-height: 1.6;
+  letter-spacing: 1px;
+}
 
-  /* panel */
-  .panel { background: var(--panel); border-radius: 8px; padding: 14px; border: 1px solid var(--border); display: flex; flex-direction: column; gap: 13px; }
+#subtitle {
+  font-size: 7px;
+  color: var(--ink);
+  opacity: 0.6;
+  display: block;
+  margin-top: 4px;
+}
 
-  /* slider row */
-  .slider-row { display: flex; flex-direction: column; gap: 5px; }
-  .slider-row.disabled { opacity: .3; pointer-events: none; }
-  .slider-meta { display: flex; justify-content: space-between; align-items: baseline; }
-  .slider-meta .slabel { font-size: 10px; letter-spacing: 2px; color: #555; }
-  .slider-meta .sval   { font-size: 12px; font-family: monospace; font-weight: 600; }
-  input[type=range] { width: 100%; height: 20px; cursor: pointer; accent-color: var(--green); }
-  input[type=range].blue   { accent-color: var(--blue); }
-  input[type=range].yellow { accent-color: var(--yellow); }
-  input[type=range].grey   { accent-color: #555; }
+#leds {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-end;
+}
 
-  /* transport */
-  #transport { display: flex; gap: 8px; }
-  #btn-run { flex: 2; background: transparent; color: var(--green); border: 1px solid var(--green); border-radius: 6px; padding: 13px; cursor: pointer; font-size: 12px; letter-spacing: 3px; font-family: monospace; transition: all .15s; -webkit-tap-highlight-color: transparent; }
-  #btn-run.stopped { background: var(--green); color: #000; box-shadow: 0 0 12px rgba(57,255,20,.4); }
-  #btn-clr { flex: 1; background: transparent; color: #444; border: 1px solid #222; border-radius: 6px; padding: 13px; cursor: pointer; font-size: 12px; letter-spacing: 3px; font-family: monospace; -webkit-tap-highlight-color: transparent; }
+.led-group { display: flex; gap: 5px; align-items: center; }
+.led {
+  width: 10px; height: 10px;
+  border: 2px solid var(--ink);
+  background: #555;
+  image-rendering: pixelated;
+}
+.led-label { font-size: 7px; color: var(--ink); letter-spacing: 1px; }
+
+/* ── SCREEN ── */
+#screen-wrap {
+  border: var(--border);
+  box-shadow: var(--shadow);
+  background: #000;
+  padding: 4px;
+  position: relative;
+}
+
+canvas {
+  display: block;
+  width: 100%;
+  height: clamp(160px, 36vw, 300px);
+  image-rendering: pixelated;
+}
+
+#screen-label {
+  position: absolute;
+  top: 8px; left: 10px;
+  font-size: 7px;
+  color: #39ff14;
+  opacity: 0.7;
+  letter-spacing: 2px;
+}
+
+#mode-label {
+  position: absolute;
+  top: 8px; right: 10px;
+  font-size: 7px;
+  color: #fff;
+  opacity: 0.4;
+  letter-spacing: 2px;
+}
+
+/* ── CONTROLS ── */
+#controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.section-label {
+  font-size: 8px;
+  color: var(--ink);
+  display: block;
+  margin-bottom: 6px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* ── TAB BAR ── */
+.tabbar {
+  display: flex;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.tabbar button {
+  flex: 1;
+  background: var(--white);
+  color: var(--ink);
+  border: var(--border);
+  box-shadow: 3px 3px 0 var(--ink);
+  padding: 8px 2px;
+  cursor: pointer;
+  font-size: 8px;
+  font-family: 'Press Start 2P', monospace;
+  transition: all .05s;
+  -webkit-tap-highlight-color: transparent;
+  line-height: 1.4;
+}
+
+.tabbar button:active { transform: translate(3px,3px); box-shadow: none; }
+.tabbar button.active {
+  background: var(--ink);
+  color: var(--yellow);
+  box-shadow: 3px 3px 0 #555;
+}
+
+/* ── CHANNEL CARD ── */
+.ch-card {
+  border: var(--border);
+  box-shadow: var(--shadow);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--white);
+}
+
+.ch-card.ch-odd { background: #fefefe; }
+
+.ch-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 2px solid var(--ink);
+  padding-bottom: 8px;
+}
+
+.ch-dot {
+  width: 14px; height: 14px;
+  border: 2px solid var(--ink);
+  flex-shrink: 0;
+  image-rendering: pixelated;
+  border-radius: 0 !important;
+}
+
+.ch-name {
+  font-size: 10px;
+  color: var(--ink);
+  letter-spacing: 1px;
+}
+
+.ch-toggle {
+  margin-left: auto;
+  background: var(--white);
+  border: var(--border);
+  box-shadow: 2px 2px 0 var(--ink);
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: 8px;
+  font-family: 'Press Start 2P', monospace;
+  color: var(--ink);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.ch-toggle:active { transform: translate(2px,2px); box-shadow: none; }
+.ch-toggle.on { background: var(--ink); color: var(--yellow); }
+
+/* ── SEG BUTTONS ── */
+.seg {
+  display: flex;
+  gap: 3px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.seg button {
+  flex: 1;
+  min-width: 0;
+  background: var(--white);
+  color: var(--ink);
+  border: var(--border);
+  box-shadow: 2px 2px 0 var(--ink);
+  padding: 7px 2px;
+  cursor: pointer;
+  font-size: 7px;
+  font-family: 'Press Start 2P', monospace;
+  -webkit-tap-highlight-color: transparent;
+  white-space: nowrap;
+  line-height: 1.4;
+}
+
+.seg button:active { transform: translate(2px,2px); box-shadow: none; }
+.seg button.active { background: var(--ink); color: var(--yellow); box-shadow: 2px 2px 0 #555; }
+
+/* ── SLIDER ── */
+.row-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.slider-row { display: flex; flex-direction: column; gap: 5px; }
+.slider-meta { display: flex; justify-content: space-between; align-items: baseline; }
+
+.slider-meta .sl {
+  font-size: 7px;
+  color: #555;
+  letter-spacing: 1px;
+}
+
+.slider-meta .sv {
+  font-size: 9px;
+  font-family: 'Press Start 2P', monospace;
+  color: var(--ink);
+}
+
+input[type=range] {
+  width: 100%;
+  height: 22px;
+  cursor: pointer;
+  accent-color: var(--ink);
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+}
+
+input[type=range]::-webkit-slider-runnable-track {
+  height: 6px;
+  background: var(--ink);
+  border: 2px solid var(--ink);
+}
+
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  background: var(--yellow);
+  border: 2px solid var(--ink);
+  margin-top: -7px;
+  cursor: pointer;
+  image-rendering: pixelated;
+}
+
+/* ── SWATCHES ── */
+.swatches {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.swatch {
+  width: 22px; height: 22px;
+  border: 2px solid var(--ink);
+  cursor: pointer;
+  image-rendering: pixelated;
+  flex-shrink: 0;
+}
+
+.swatch.selected {
+  outline: 3px solid var(--ink);
+  outline-offset: 2px;
+}
+
+/* ── TRANSPORT ── */
+#transport { display: flex; gap: 8px; }
+
+#btn-run {
+  flex: 2;
+  background: var(--red);
+  color: var(--white);
+  border: var(--border);
+  box-shadow: var(--shadow);
+  padding: 12px;
+  cursor: pointer;
+  font-size: 10px;
+  font-family: 'Press Start 2P', monospace;
+  -webkit-tap-highlight-color: transparent;
+  line-height: 1.6;
+}
+
+#btn-run:active { transform: translate(4px,4px); box-shadow: none; }
+#btn-run.stopped { background: var(--white); color: var(--ink); }
+
+#btn-clr {
+  flex: 1;
+  background: var(--white);
+  color: var(--ink);
+  border: var(--border);
+  box-shadow: var(--shadow);
+  padding: 12px;
+  cursor: pointer;
+  font-size: 10px;
+  font-family: 'Press Start 2P', monospace;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#btn-clr:active { transform: translate(4px,4px); box-shadow: none; }
+
+/* trigger card */
+.trigger-card {
+  border: var(--border);
+  box-shadow: var(--shadow);
+  padding: 10px;
+  background: var(--cyan);
+}
 </style>
 </head>
 <body>
 
-<!-- Header -->
 <div id="header">
-  <div>
-    <span id="title">DIDASCOPE</span>
-    <span id="subtitle">DS-2M</span>
-  </div>
+  <div><span id="title">DIDASCOPO<br>DS-2M</span></div>
   <div id="leds">
-    <div class="led-group"><div class="led" id="led-run"></div><span class="led-label">RUN</span></div>
-    <div class="led-group"><div class="led" id="led-mic"></div><span class="led-label">MIC</span></div>
+    <div class="led-group"><div class="led" id="led-run"></div><span class="led-label">ON</span></div>
+    <div class="led-group"><div class="led" id="led-ch1"></div><span class="led-label">CH1</span></div>
+    <div class="led-group"><div class="led" id="led-ch2"></div><span class="led-label">CH2</span></div>
   </div>
 </div>
 
-<!-- Screen -->
 <div id="screen-wrap">
   <canvas id="scope"></canvas>
-  <div id="screen-label">● SYNTH</div>
-  <div id="mic-warn"></div>
+  <div id="screen-label">● WAVE</div>
+  <div id="mode-label">WAVE</div>
 </div>
 
-<!-- Controls -->
 <div id="controls">
 
-  <!-- Source -->
+  <!-- Display mode -->
   <div>
-    <div class="section-label">INPUT SOURCE</div>
-    <div class="tabbar">
-      <button id="tab-synth" class="active-synth" onclick="switchSrc('synth')">SYNTH</button>
-      <button id="tab-mic"   onclick="switchSrc('mic')">MIC 🎤</button>
+    <span class="section-label">MODALITA' VISIVA</span>
+    <div class="tabbar" style="margin-top:6px">
+      <button id="tab-wave" class="active" onclick="setMode('wave')">ONDA</button>
+      <button id="tab-dot"  onclick="setMode('dot')">PUNTINO</button>
+      <button id="tab-xy"   onclick="setMode('xy')">X VS Y</button>
     </div>
   </div>
 
-  <!-- Waveform (shown only for synth) -->
-  <div id="wave-section">
-    <div id="wave-row">
-      <button class="wave-btn active" data-w="sine"     onclick="setWave(this)">SIN</button>
-      <button class="wave-btn"        data-w="square"   onclick="setWave(this)">SQR</button>
-      <button class="wave-btn"        data-w="sawtooth" onclick="setWave(this)">SAW</button>
-      <button class="wave-btn"        data-w="triangle" onclick="setWave(this)">TRI</button>
+  <!-- Global -->
+  <div class="ch-card" style="background:var(--yellow)">
+    <span class="section-label">ROBA GLOBALE</span>
+    <div class="row-grid">
+      <div class="slider-row">
+        <div class="slider-meta"><span class="sl">VELOCITA'</span><span class="sv" id="v-time" style="color:#fff">1.0×</span></div>
+        <input type="range" id="sl-time" min="0.2" max="4" step="0.1" value="1" style="accent-color:#fff">
+      </div>
+      <div class="slider-row">
+        <div class="slider-meta"><span class="sl">NOISE</span><span class="sv" id="v-noise" style="color:#555">0.00</span></div>
+        <input type="range" id="sl-noise" min="0" max="0.2" step="0.005" value="0" style="accent-color:#555">
+      </div>
     </div>
   </div>
 
-  <!-- Signal panel -->
-  <div class="panel" id="signal-panel">
-    <div class="section-label">SIGNAL</div>
-
-    <div class="slider-row" id="row-freq">
-      <div class="slider-meta">
-        <span class="slabel">FREQUENCY</span>
-        <span class="sval" id="v-freq" style="color:var(--green)">2.0 Hz</span>
-      </div>
-      <input type="range" id="sl-freq" min="0.2" max="10" step="0.1" value="2">
+  <!-- CH1 -->
+  <div class="ch-card" id="card-ch0">
+    <div class="ch-header">
+      <div class="ch-dot" id="dot-ch0"></div>
+      <span class="ch-name" id="name-ch0">CH 1</span>
+      <button class="ch-toggle on" id="toggle-ch0" onclick="toggleCh(0)">ON</button>
     </div>
 
-    <div class="slider-row" id="row-amp">
-      <div class="slider-meta">
-        <span class="slabel">AMPLITUDE</span>
-        <span class="sval" id="v-amp" style="color:var(--green)">0.75</span>
+    <div>
+      <span class="sl" style="font-size:9px;letter-spacing:1px;color:#444">SORGENS</span>
+      <div class="seg" style="margin-top:4px" id="src-ch0">
+        <button class="active" data-v="synth" onclick="setSrc(0,this)">SINTETI</button>
+        <button data-v="mic" onclick="setSrc(0,this)">MICROFUN</button>
       </div>
-      <input type="range" id="sl-amp" min="0" max="1" step="0.01" value="0.75">
     </div>
 
-    <div class="slider-row disabled" id="row-gain">
-      <div class="slider-meta">
-        <span class="slabel">MIC GAIN</span>
-        <span class="sval" id="v-gain" style="color:var(--blue)">×2.0</span>
+    <div id="synth-ch0">
+      <span class="sl" style="font-size:9px;letter-spacing:1px;color:#444">FORMA ONDA</span>
+      <div class="seg" style="margin-top:4px">
+        <button class="active" data-w="sine"     onclick="setWave(0,this)">SIN</button>
+        <button data-w="square"   onclick="setWave(0,this)">SQR</button>
+        <button data-w="sawtooth" onclick="setWave(0,this)">SAW</button>
+        <button data-w="triangle" onclick="setWave(0,this)">TRI</button>
       </div>
-      <input type="range" class="blue" id="sl-gain" min="0.1" max="10" step="0.1" value="2">
     </div>
 
-    <div class="slider-row">
-      <div class="slider-meta">
-        <span class="slabel">Y OFFSET</span>
-        <span class="sval" id="v-yoff" style="color:var(--green)">0.00</span>
+    <div class="row-grid">
+      <div class="slider-row" id="freq-row-ch0">
+        <div class="slider-meta"><span class="sl">FREQ</span><span class="sv" id="v-freq-ch0">2.0Hz</span></div>
+        <input type="range" id="sl-freq-ch0" min="0.2" max="10" step="0.1" value="2">
       </div>
-      <input type="range" id="sl-yoff" min="-2" max="2" step="0.1" value="0">
-    </div>
-  </div>
-
-  <!-- Timebase panel -->
-  <div class="panel">
-    <div class="section-label">TIMEBASE · TRIGGER</div>
-
-    <div class="slider-row">
-      <div class="slider-meta">
-        <span class="slabel">TIME / DIV</span>
-        <span class="sval" id="v-time" style="color:var(--green)">1.0×</span>
+      <div class="slider-row" id="amp-row-ch0">
+        <div class="slider-meta"><span class="sl">AMPL</span><span class="sv" id="v-amp-ch0">0.75</span></div>
+        <input type="range" id="sl-amp-ch0" min="0" max="1" step="0.01" value="0.75">
       </div>
-      <input type="range" id="sl-time" min="0.2" max="4" step="0.1" value="1">
+      <div class="slider-row" id="gain-row-ch0" style="display:none">
+        <div class="slider-meta"><span class="sl">GAIN</span><span class="sv" id="v-gain-ch0">×2.0</span></div>
+        <input type="range" id="sl-gain-ch0" min="0.1" max="10" step="0.1" value="2">
+      </div>
+      <div class="slider-row">
+        <div class="slider-meta"><span class="sl">SU-GIU'</span><span class="sv" id="v-yoff-ch0">0.0</span></div>
+        <input type="range" id="sl-yoff-ch0" min="-2" max="2" step="0.1" value="0">
+      </div>
     </div>
 
-    <div class="slider-row">
-      <div class="slider-meta">
-        <span class="slabel">TRIGGER LVL</span>
-        <span class="sval" id="v-trig" style="color:var(--yellow)">0.00</span>
+    <div id="axis-row-ch0" style="display:none">
+      <span class="sl" style="font-size:9px;letter-spacing:1px;color:#444">ASSE (XY)</span>
+      <div class="seg" style="margin-top:4px" id="axis-ch0">
+        <button class="active" data-v="x" onclick="setAxis(0,this)">X</button>
+        <button data-v="y" onclick="setAxis(0,this)">Y</button>
       </div>
-      <input type="range" class="yellow" id="sl-trig" min="-1" max="1" step="0.05" value="0">
     </div>
 
-    <div class="slider-row">
-      <div class="slider-meta">
-        <span class="slabel">NOISE</span>
-        <span class="sval" id="v-noise" style="color:#555">0.020</span>
-      </div>
-      <input type="range" class="grey" id="sl-noise" min="0" max="0.2" step="0.005" value="0.02">
+    <div>
+      <span class="sl" style="font-size:9px;letter-spacing:1px;color:#444;display:block;margin-bottom:6px">COLORE</span>
+      <div class="swatches" id="swatches-ch0"></div>
     </div>
   </div>
 
-  <!-- Transport -->
+  <!-- CH2 -->
+  <div class="ch-card ch-odd" id="card-ch1">
+    <div class="ch-header">
+      <div class="ch-dot" id="dot-ch1"></div>
+      <span class="ch-name" id="name-ch1">CH 2</span>
+      <button class="ch-toggle on" id="toggle-ch1" onclick="toggleCh(1)">ON</button>
+    </div>
+
+    <div>
+      <span class="sl" style="font-size:9px;letter-spacing:1px;color:#444">SOURCE</span>
+      <div class="seg" style="margin-top:4px" id="src-ch1">
+        <button class="active" data-v="synth" onclick="setSrc(1,this)">SYNTH</button>
+        <button data-v="mic" onclick="setSrc(1,this)">MIC 🎤</button>
+      </div>
+    </div>
+
+    <div id="synth-ch1">
+      <span class="sl" style="font-size:9px;letter-spacing:1px;color:#444">WAVEFORM</span>
+      <div class="seg" style="margin-top:4px">
+        <button class="active" data-w="sine"     onclick="setWave(1,this)">SIN</button>
+        <button data-w="square"   onclick="setWave(1,this)">SQR</button>
+        <button data-w="sawtooth" onclick="setWave(1,this)">SAW</button>
+        <button data-w="triangle" onclick="setWave(1,this)">TRI</button>
+      </div>
+    </div>
+
+    <div class="row-grid">
+      <div class="slider-row" id="freq-row-ch1">
+        <div class="slider-meta"><span class="sl">FREQ</span><span class="sv" id="v-freq-ch1">3.0Hz</span></div>
+        <input type="range" id="sl-freq-ch1" min="0.2" max="10" step="0.1" value="3">
+      </div>
+      <div class="slider-row" id="amp-row-ch1">
+        <div class="slider-meta"><span class="sl">AMPL</span><span class="sv" id="v-amp-ch1">0.75</span></div>
+        <input type="range" id="sl-amp-ch1" min="0" max="1" step="0.01" value="0.75">
+      </div>
+      <div class="slider-row" id="gain-row-ch1" style="display:none">
+        <div class="slider-meta"><span class="sl">GAIN</span><span class="sv" id="v-gain-ch1">×2.0</span></div>
+        <input type="range" id="sl-gain-ch1" min="0.1" max="10" step="0.1" value="2">
+      </div>
+      <div class="slider-row">
+        <div class="slider-meta"><span class="sl">Y OFFSET</span><span class="sv" id="v-yoff-ch1">0.0</span></div>
+        <input type="range" id="sl-yoff-ch1" min="-2" max="2" step="0.1" value="0">
+      </div>
+    </div>
+
+    <div id="axis-row-ch1" style="display:none">
+      <span class="sl" style="font-size:9px;letter-spacing:1px;color:#444">AXIS (XY mode)</span>
+      <div class="seg" style="margin-top:4px" id="axis-ch1">
+        <button data-v="x" onclick="setAxis(1,this)">X</button>
+        <button class="active" data-v="y" onclick="setAxis(1,this)">Y</button>
+      </div>
+    </div>
+
+    <div>
+      <span class="sl" style="font-size:9px;letter-spacing:1px;color:#444;display:block;margin-bottom:6px">COLOR</span>
+      <div class="swatches" id="swatches-ch1"></div>
+    </div>
+  </div>
+
+  <!-- Global trigger -->
+  <div class="trigger-card">
+    <span class="section-label">TRIGGERO</span>
+    <div class="slider-row">
+      <div class="slider-meta"><span class="sl">LEVEL</span><span class="sv" id="v-trig" style="color:#ffdd00">0.00</span></div>
+      <input type="range" id="sl-trig" min="-1" max="1" step="0.05" value="0" style="accent-color:#ffdd00">
+    </div>
+  </div>
+
   <div id="transport">
-    <button id="btn-run" onclick="toggleRun()">■&nbsp;&nbsp;STOP</button>
+    <button id="btn-run" onclick="toggleRun()">STOP!!</button>
     <button id="btn-clr" onclick="clearScreen()">CLR</button>
   </div>
-
 </div>
 
 <script>
-// ── State ──────────────────────────────────────────────────────────────────
-const state = {
-  src: "synth", waveform: "sine",
-  freq: 2, amp: 0.75, gain: 2, yOff: 0,
-  timebase: 1, trig: 0, noise: 0.02,
-  running: true, micOk: false,
-};
+// ── Palette ────────────────────────────────────────────────────────────────
+const PALETTE = ["#39ff14","#00cfff","#ff6b35","#ffdd00","#ff3399","#aa44ff","#ffffff","#ff4444"];
 
 // ── Waveforms ──────────────────────────────────────────────────────────────
 const WF = {
-  sine:     t => Math.sin(2 * Math.PI * t),
-  square:   t => Math.sign(Math.sin(2 * Math.PI * t)),
-  sawtooth: t => 2 * (t - Math.floor(t + 0.5)),
-  triangle: t => 2 * Math.abs(2 * (t - Math.floor(t + 0.5))) - 1,
+  sine:     t => Math.sin(2*Math.PI*t),
+  square:   t => Math.sign(Math.sin(2*Math.PI*t)),
+  sawtooth: t => 2*(t-Math.floor(t+0.5)),
+  triangle: t => 2*Math.abs(2*(t-Math.floor(t+0.5)))-1,
 };
 
-function findTrigger(buf, level, hyst = 0.02) {
-  for (let i = 1; i < buf.length - 1; i++)
-    if (buf[i - 1] < level - hyst && buf[i] >= level) return i;
+function findTrigger(buf, level, hyst=0.02) {
+  for (let i=1; i<buf.length-1; i++)
+    if (buf[i-1]<level-hyst && buf[i]>=level) return i;
   return 0;
 }
+
+// ── State ──────────────────────────────────────────────────────────────────
+const G = { timebase:1, noise:0, trig:0, mode:"wave", running:true };
+
+const CH = [
+  { enabled:true, src:"synth", waveform:"sine", freq:2, amp:0.75, gain:2, yOff:0, color:"#39ff14", axis:"x",
+    stream:null, actx:null, analyser:null, micBuf:null, micOk:false },
+  { enabled:true, src:"synth", waveform:"sine", freq:3, amp:0.75, gain:2, yOff:0, color:"#00cfff", axis:"y",
+    stream:null, actx:null, analyser:null, micBuf:null, micOk:false },
+];
 
 // ── Canvas ─────────────────────────────────────────────────────────────────
 const canvas = document.getElementById("scope");
 const ctx    = canvas.getContext("2d");
-let offscreen, offCtx, W, H;
+let off, offCtx, W, H;
 
 function initCanvas() {
-  const dpr = window.devicePixelRatio || 1;
+  const dpr  = window.devicePixelRatio || 1;
   const rect = canvas.getBoundingClientRect();
-  W = Math.round(rect.width  * dpr);
-  H = Math.round(rect.height * dpr);
-  canvas.width  = W;
-  canvas.height = H;
-  offscreen = document.createElement("canvas");
-  offscreen.width = W; offscreen.height = H;
-  offCtx = offscreen.getContext("2d");
-  offCtx.fillStyle = "#000";
-  offCtx.fillRect(0, 0, W, H);
+  W = Math.round(rect.width*dpr);
+  H = Math.round(rect.height*dpr);
+  canvas.width=W; canvas.height=H;
+  off = document.createElement("canvas");
+  off.width=W; off.height=H;
+  offCtx = off.getContext("2d");
+  offCtx.fillStyle="#000"; offCtx.fillRect(0,0,W,H);
 }
 
 function drawGrid() {
-  const cols = 10, rows = 8;
-  for (let i = 0; i <= cols; i++) {
-    ctx.strokeStyle = i === 5 ? "rgba(57,255,20,0.28)" : "rgba(57,255,20,0.13)";
-    ctx.lineWidth   = i === 5 ? 1 : 0.5;
-    ctx.beginPath(); ctx.moveTo((i/cols)*W, 0); ctx.lineTo((i/cols)*W, H); ctx.stroke();
+  const cols=10, rows=8;
+  for(let i=0;i<=cols;i++){
+    ctx.strokeStyle=i===5?"rgba(57,255,20,0.28)":"rgba(57,255,20,0.12)";
+    ctx.lineWidth=i===5?1:0.5;
+    ctx.beginPath();ctx.moveTo((i/cols)*W,0);ctx.lineTo((i/cols)*W,H);ctx.stroke();
   }
-  for (let j = 0; j <= rows; j++) {
-    ctx.strokeStyle = j === 4 ? "rgba(57,255,20,0.28)" : "rgba(57,255,20,0.13)";
-    ctx.lineWidth   = j === 4 ? 1 : 0.5;
-    ctx.beginPath(); ctx.moveTo(0, (j/rows)*H); ctx.lineTo(W, (j/rows)*H); ctx.stroke();
+  for(let j=0;j<=rows;j++){
+    ctx.strokeStyle=j===4?"rgba(57,255,20,0.28)":"rgba(57,255,20,0.12)";
+    ctx.lineWidth=j===4?1:0.5;
+    ctx.beginPath();ctx.moveTo(0,(j/rows)*H);ctx.lineTo(W,(j/rows)*H);ctx.stroke();
   }
 }
 
+// ── Signal helpers ─────────────────────────────────────────────────────────
+let t0=0;
+
+function synthSample(ch, phase) {
+  return WF[ch.waveform](phase*ch.freq)*ch.amp;
+}
+
+function getMicBuf(ch) {
+  if (!ch.analyser||!ch.micBuf) return null;
+  ch.analyser.getFloatTimeDomainData(ch.micBuf);
+  return ch.micBuf;
+}
+
+// returns array of values -1..1 for wave mode
+function getWaveSamples(ch, n) {
+  if (ch.src==="mic") {
+    const buf = getMicBuf(ch);
+    if (!buf) return new Float32Array(n);
+    const off2 = findTrigger(buf, G.trig);
+    const win  = Math.min(Math.floor(1024*G.timebase), buf.length-off2);
+    const out  = new Float32Array(n);
+    for (let i=0;i<n;i++) {
+      const idx = off2+Math.floor(i/n*win);
+      out[i] = (buf[Math.min(idx,buf.length-1)]||0)*ch.gain;
+    }
+    return out;
+  } else {
+    const out = new Float32Array(n);
+    for (let i=0;i<n;i++) {
+      const t = (i/n)*G.timebase + t0*ch.freq*0.0001;
+      out[i] = synthSample(ch, t);
+    }
+    return out;
+  }
+}
+
+// returns single current value for dot/XY
+function getCurrentSample(ch) {
+  if (ch.src==="mic") {
+    const buf = getMicBuf(ch);
+    if (!buf) return 0;
+    const off2 = findTrigger(buf, G.trig);
+    return (buf[off2]||0)*ch.gain;
+  } else {
+    const t = t0*ch.freq*0.0001;
+    return synthSample(ch, t);
+  }
+}
+
+// ── Draw modes ─────────────────────────────────────────────────────────────
 function strokePts(c, pts, color, blur, lw) {
-  if (pts.length < 2) return;
-  c.shadowBlur = blur; c.shadowColor = color; c.strokeStyle = color; c.lineWidth = lw;
-  c.beginPath(); pts.forEach(([x,y],i) => i ? c.lineTo(x,y) : c.moveTo(x,y)); c.stroke();
-  c.shadowBlur = 0;
+  if (pts.length<2) return;
+  c.shadowBlur=blur; c.shadowColor=color; c.strokeStyle=color; c.lineWidth=lw;
+  c.beginPath(); pts.forEach(([x,y],i)=>i?c.lineTo(x,y):c.moveTo(x,y)); c.stroke();
+  c.shadowBlur=0;
 }
 
-// ── Points generation ──────────────────────────────────────────────────────
-let t0 = 0;
-function synthPts() {
-  const n = Math.min(W * 2, 1440);
-  const margin = H / 2 - 8;
-  return Array.from({length: n + 1}, (_, i) => {
-    const t = (i/n) * state.timebase + t0 * state.freq * 0.0001;
-    const y = WF[state.waveform](t * state.freq) * state.amp + (Math.random()-.5) * state.noise * 2;
-    return [(i/n)*W, H/2 - y*margin + state.yOff*(H/8)];
+function drawWave() {
+  const n = Math.min(W*2, 1440);
+  const margin = H/2-8;
+  CH.forEach(ch => {
+    if (!ch.enabled) return;
+    const samples = getWaveSamples(ch, n);
+    const pts = Array.from({length:n}, (_,i) => {
+      const noise = (Math.random()-.5)*G.noise*2;
+      const y = (samples[i]+noise);
+      return [(i/(n-1))*W, H/2 - y*margin + ch.yOff*(H/8)];
+    });
+    strokePts(offCtx, pts, ch.color+"33", 0, 5);
+    strokePts(offCtx, pts, ch.color, 6, 1.5);
   });
 }
 
-function micPts() {
-  if (!analyser || !micBuf) return [];
-  analyser.getFloatTimeDomainData(micBuf);
-  const off2  = findTrigger(micBuf, state.trig);
-  const win   = Math.min(Math.floor(1024 * state.timebase), micBuf.length - off2);
-  if (win < 2) return [];
-  const margin = H / 2 - 8;
-  return Array.from({length: win}, (_, i) => {
-    const y = micBuf[off2+i] * state.gain + (Math.random()-.5) * state.noise * 2;
-    return [(i/(win-1))*W, H/2 - y*margin + state.yOff*(H/8)];
+function drawDot() {
+  const margin = H/2-16;
+  CH.forEach(ch => {
+    if (!ch.enabled) return;
+    const v = getCurrentSample(ch) + (Math.random()-.5)*G.noise*2;
+    const x = W/2;
+    const y = H/2 - v*margin + ch.yOff*(H/8);
+    const col = ch.color;
+    const g2 = offCtx.createRadialGradient(x,y,0,x,y,20);
+    g2.addColorStop(0, col+"ee");
+    g2.addColorStop(0.3, col+"66");
+    g2.addColorStop(1, col+"00");
+    offCtx.fillStyle=g2;
+    offCtx.beginPath(); offCtx.arc(x,y,20,0,Math.PI*2); offCtx.fill();
+    offCtx.fillStyle="#fff";
+    offCtx.shadowBlur=8; offCtx.shadowColor=col;
+    offCtx.beginPath(); offCtx.arc(x,y,2.5,0,Math.PI*2); offCtx.fill();
+    offCtx.shadowBlur=0;
   });
+}
+
+function drawXY() {
+  // find X and Y channels
+  const xCh = CH.find(c=>c.enabled&&c.axis==="x");
+  const yCh = CH.find(c=>c.enabled&&c.axis==="y");
+  if (!xCh&&!yCh) return;
+
+  const n = Math.min(W*2, 1440);
+  const samplesX = xCh ? getWaveSamples(xCh, n) : new Float32Array(n);
+  const samplesY = yCh ? getWaveSamples(yCh, n) : new Float32Array(n);
+  const marginX  = W/2-8;
+  const marginY  = H/2-8;
+
+  // color: blend or use whichever is active
+  const col = xCh ? xCh.color : yCh.color;
+
+  const pts = Array.from({length:n}, (_,i) => [
+    W/2 + samplesX[i]*marginX,
+    H/2 - samplesY[i]*marginY,
+  ]);
+  strokePts(offCtx, pts, col+"33", 0, 4);
+  strokePts(offCtx, pts, col, 8, 1.5);
 }
 
 // ── Render loop ────────────────────────────────────────────────────────────
 function loop(ts) {
   requestAnimationFrame(loop);
-  if (!state.running || !offCtx) return;
+  if (!G.running||!offCtx) return;
   t0 = ts;
 
-  offCtx.fillStyle = "rgba(0,0,0,0.22)";
-  offCtx.fillRect(0, 0, W, H);
+  offCtx.fillStyle="rgba(0,0,0,0.2)"; offCtx.fillRect(0,0,W,H);
 
-  const pts = state.src === "mic" ? micPts() : synthPts();
-  strokePts(offCtx, pts, "rgba(57,255,20,0.15)", 0, 5);
-  strokePts(offCtx, pts, "#39ff14", 6, 1.5);
+  if (G.mode==="wave")      drawWave();
+  else if (G.mode==="dot")  drawDot();
+  else if (G.mode==="xy")   drawXY();
 
-  // trigger line
-  const ty = H/2 - state.trig*(H/2-8);
-  offCtx.strokeStyle="rgba(255,220,0,0.3)"; offCtx.lineWidth=1; offCtx.setLineDash([3,6]);
-  offCtx.beginPath(); offCtx.moveTo(0,ty); offCtx.lineTo(W,ty); offCtx.stroke();
-  offCtx.setLineDash([]);
-
-  // composite
-  ctx.fillStyle = "#000"; ctx.fillRect(0, 0, W, H);
-  ctx.drawImage(offscreen, 0, 0);
-  drawGrid();
-
-  // scanlines
-  for (let y = 0; y < H; y += Math.max(2, H/180)) {
-    ctx.fillStyle = "rgba(0,0,0,0.06)"; ctx.fillRect(0, y, W, 1);
+  // trigger line (wave mode only)
+  if (G.mode==="wave") {
+    const ty = H/2 - G.trig*(H/2-8);
+    offCtx.strokeStyle="rgba(255,220,0,0.25)"; offCtx.lineWidth=1; offCtx.setLineDash([3,6]);
+    offCtx.beginPath(); offCtx.moveTo(0,ty); offCtx.lineTo(W,ty); offCtx.stroke();
+    offCtx.setLineDash([]);
   }
-  // vignette
-  const vg = ctx.createRadialGradient(W/2, H/2, H*.2, W/2, H/2, H*.8);
-  vg.addColorStop(0, "transparent"); vg.addColorStop(1, "rgba(0,0,0,0.6)");
-  ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
+
+  ctx.fillStyle="#000"; ctx.fillRect(0,0,W,H);
+  ctx.drawImage(off,0,0);
+  drawGrid();
+  for(let y=0;y<H;y+=Math.max(2,H/180)){ctx.fillStyle="rgba(0,0,0,0.05)";ctx.fillRect(0,y,W,1);}
+  const vg=ctx.createRadialGradient(W/2,H/2,H*.2,W/2,H/2,H*.8);
+  vg.addColorStop(0,"transparent"); vg.addColorStop(1,"rgba(0,0,0,0.55)");
+  ctx.fillStyle=vg; ctx.fillRect(0,0,W,H);
 }
 
 // ── Mic ────────────────────────────────────────────────────────────────────
-let analyser = null, micBuf = null, stream = null, actx = null;
-
-async function startMic() {
+async function startMic(ch) {
   try {
-    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    actx = new (window.AudioContext || window.webkitAudioContext)();
-    if (actx.state === "suspended") await actx.resume();
-    analyser = actx.createAnalyser();
-    analyser.fftSize = 2048;
-    analyser.smoothingTimeConstant = 0;
-    actx.createMediaStreamSource(stream).connect(analyser);
-    micBuf = new Float32Array(2048);
-    state.micOk = true;
-    updateMicUI(true);
+    const constraints = [{ audio:{sampleRate:44100} }, { audio:{sampleRate:48000} }, { audio:true }];
+    let stream = null;
+    for (const c of constraints) {
+      try { stream = await navigator.mediaDevices.getUserMedia(c); break; }
+      catch(e) { if (e.name!=="OverconstrainedError") throw e; }
+    }
+    if (!stream) throw new Error("no stream");
+    ch.stream = stream;
+    ch.actx = new (window.AudioContext||window.webkitAudioContext)();
+    if (ch.actx.state==="suspended") await ch.actx.resume();
+    ch.analyser = ch.actx.createAnalyser();
+    ch.analyser.fftSize=2048; ch.analyser.smoothingTimeConstant=0;
+    ch.actx.createMediaStreamSource(stream).connect(ch.analyser);
+    ch.micBuf = new Float32Array(2048);
+    ch.micOk = true;
     return true;
   } catch(e) {
-    console.warn("Mic error:", e.name, e.message);
-    state.micOk = false;
-    updateMicUI(false);
-    const warn = document.getElementById("mic-warn");
-    warn.style.display = "block";
-    if (e.name === "NotAllowedError") {
-      warn.textContent = "MIC DENIED — allow in Safari settings";
-    } else if (e.name === "NotFoundError") {
-      warn.textContent = "NO MIC FOUND";
-    } else {
-      warn.textContent = e.name + ": " + e.message;
-    }
+    console.warn("Mic:", e.name, e.message);
+    ch.micOk = false;
     return false;
   }
 }
 
-function stopMic() {
-  stream?.getTracks().forEach(t => t.stop());
-  actx?.close();
-  analyser = null; micBuf = null; stream = null; actx = null;
-  state.micOk = false;
-  updateMicUI(false);
+function stopMic(ch) {
+  ch.stream?.getTracks().forEach(t=>t.stop());
+  ch.actx?.close();
+  ch.stream=null; ch.actx=null; ch.analyser=null; ch.micBuf=null; ch.micOk=false;
 }
 
-function updateMicUI(ok) {
-  const led = document.getElementById("led-mic");
-  led.style.background = ok ? "var(--blue)" : "#1a1a1a";
-  led.style.boxShadow  = ok ? "0 0 4px var(--blue)" : "none";
-  document.getElementById("mic-warn").style.display = "none";
+// ── Controls ───────────────────────────────────────────────────────────────
+function setMode(m) {
+  G.mode = m;
+  ["wave","dot","xy"].forEach(id => {
+    const btn = document.getElementById("tab-"+id);
+    btn.className = m===id?"active":"";
+    btn.style.color = m===id?"#39ff14":"#555";
+    btn.style.boxShadow = m===id?"inset 0 -2px 0 #39ff14":"none";
+  });
+  document.getElementById("mode-label").textContent = m.toUpperCase();
+  // show/hide axis rows
+  [0,1].forEach(i => {
+    document.getElementById("axis-row-ch"+i).style.display = m==="xy"?"block":"none";
+  });
+  clearScreen();
 }
 
-// ── Source switch ──────────────────────────────────────────────────────────
-async function switchSrc(val) {
-  if (val === "mic") {
-    const ok = await startMic();
-    if (!ok) return;
+function toggleCh(i) {
+  const ch = CH[i];
+  ch.enabled = !ch.enabled;
+  const btn = document.getElementById("toggle-ch"+i);
+  btn.textContent = ch.enabled?"ON":"OFF";
+  btn.style.background = ch.enabled ? ch.color : "transparent";
+  btn.style.color       = ch.enabled ? "#000"   : "#555";
+  btn.style.borderColor = ch.enabled ? ch.color  : "#333";
+  document.getElementById("card-ch"+i).style.opacity = ch.enabled?"1":"0.4";
+  updateLED(i);
+}
+
+async function setSrc(i, btn) {
+  const ch = CH[i];
+  const val = btn.dataset.v;
+  if (val===ch.src) return;
+  if (val==="mic") {
+    const ok = await startMic(ch);
+    if (!ok) { alert("Mic access denied or unavailable"); return; }
   } else {
-    stopMic();
+    stopMic(ch);
   }
-  state.src = val;
-
-  // tabs
-  document.getElementById("tab-synth").className = val === "synth" ? "active-synth" : "";
-  document.getElementById("tab-mic").className   = val === "mic"   ? "active-mic"   : "";
-
-  // show/hide synth controls
-  document.getElementById("wave-section").style.display = val === "synth" ? "block" : "none";
-  document.getElementById("row-freq").classList.toggle("disabled", val === "mic");
-  document.getElementById("row-amp").classList.toggle("disabled",  val === "mic");
-  document.getElementById("row-gain").classList.toggle("disabled", val === "synth");
-
-  document.getElementById("screen-label").textContent = val === "mic" ? "● MIC" : "● " + state.waveform.toUpperCase();
+  ch.src = val;
+  // update seg buttons
+  document.querySelectorAll("#src-ch"+i+" button").forEach(b=>{
+    b.className = b.dataset.v===val?"active":"";
+    b.style.background = b.dataset.v===val?ch.color:"transparent";
+    b.style.color       = b.dataset.v===val?"#000":"#444";
+    b.style.borderColor = b.dataset.v===val?ch.color:"#2a2a2a";
+  });
+  document.getElementById("synth-ch"+i).style.display    = val==="synth"?"block":"none";
+  document.getElementById("freq-row-ch"+i).style.display = val==="synth"?"flex":"none";
+  document.getElementById("amp-row-ch"+i).style.display  = val==="synth"?"flex":"none";
+  document.getElementById("gain-row-ch"+i).style.display = val==="mic"?"flex":"none";
 }
 
-// ── Waveform ───────────────────────────────────────────────────────────────
-function setWave(btn) {
-  document.querySelectorAll(".wave-btn").forEach(b => b.classList.remove("active"));
-  btn.classList.add("active");
-  state.waveform = btn.dataset.w;
-  document.getElementById("screen-label").textContent = "● " + state.waveform.toUpperCase();
-}
-
-// ── Sliders ────────────────────────────────────────────────────────────────
-function bind(id, valId, key, fmt) {
-  const sl = document.getElementById(id);
-  const vl = document.getElementById(valId);
-  sl.addEventListener("input", () => {
-    state[key] = parseFloat(sl.value);
-    vl.textContent = fmt(state[key]);
+function setWave(i, btn) {
+  CH[i].waveform = btn.dataset.w;
+  btn.closest(".seg").querySelectorAll("button").forEach(b=>{
+    const a = b===btn;
+    b.className = a?"active":"";
+    applySegStyle(b, a, CH[i].color);
   });
 }
 
-bind("sl-freq",  "v-freq",  "freq",     v => v.toFixed(1) + " Hz");
-bind("sl-amp",   "v-amp",   "amp",      v => v.toFixed(2));
-bind("sl-gain",  "v-gain",  "gain",     v => "×" + v.toFixed(1));
-bind("sl-yoff",  "v-yoff",  "yOff",     v => (v>=0?"+":"")+v.toFixed(1));
-bind("sl-time",  "v-time",  "timebase", v => v.toFixed(1) + "×");
-bind("sl-trig",  "v-trig",  "trig",     v => v.toFixed(2));
-bind("sl-noise", "v-noise", "noise",    v => v.toFixed(3));
+function setAxis(i, btn) {
+  CH[i].axis = btn.dataset.v;
+  btn.closest(".seg").querySelectorAll("button").forEach(b=>{
+    const a = b===btn;
+    b.className = a?"active":"";
+    applySegStyle(b, a, CH[i].color);
+  });
+}
 
-// ── Transport ──────────────────────────────────────────────────────────────
+function applySegStyle(btn, active, color) {
+  btn.style.background  = active?color:"transparent";
+  btn.style.color       = active?"#000":"#444";
+  btn.style.borderColor = active?color:"#2a2a2a";
+}
+
+function setColor(i, color) {
+  CH[i].color = color;
+  // update dot, name, toggle button
+  document.getElementById("dot-ch"+i).style.background = color;
+  document.getElementById("dot-ch"+i).style.boxShadow  = `0 0 6px ${color}`;
+  const toggle = document.getElementById("toggle-ch"+i);
+  if (CH[i].enabled) { toggle.style.background=color; toggle.style.borderColor=color; }
+  // update swatch selection
+  document.querySelectorAll("#swatches-ch"+i+" .swatch").forEach(s=>{
+    s.classList.toggle("selected", s.dataset.c===color);
+  });
+  // recolor active seg buttons for this channel
+  document.querySelectorAll("#src-ch"+i+" button.active, #axis-ch"+i+" button.active").forEach(b=>{
+    b.style.background=color; b.style.borderColor=color;
+  });
+  // update slider accent
+  ["sl-freq-ch"+i,"sl-amp-ch"+i,"sl-gain-ch"+i,"sl-yoff-ch"+i].forEach(id=>{
+    const el = document.getElementById(id);
+    if (el) el.style.accentColor = color;
+  });
+  // update value displays
+  ["v-freq-ch"+i,"v-amp-ch"+i,"v-gain-ch"+i,"v-yoff-ch"+i].forEach(id=>{
+    const el = document.getElementById(id);
+    if (el) el.style.color = color;
+  });
+  updateLED(i);
+}
+
+function updateLED(i) {
+  const led = document.getElementById("led-ch"+(i+1));
+  const ch  = CH[i];
+  led.style.background = ch.enabled ? ch.color : "#1a1a1a";
+  led.style.boxShadow  = ch.enabled ? `0 0 4px ${ch.color}` : "none";
+}
+
+function bindSlider(id, valId, obj, key, fmt) {
+  const sl = document.getElementById(id);
+  const vl = document.getElementById(valId);
+  if (!sl||!vl) return;
+  sl.addEventListener("input", ()=>{
+    obj[key] = parseFloat(sl.value);
+    vl.textContent = fmt(obj[key]);
+  });
+}
+
 function toggleRun() {
-  state.running = !state.running;
+  G.running = !G.running;
   const btn = document.getElementById("btn-run");
-  btn.textContent = state.running ? "■\u00a0\u00a0STOP" : "▶\u00a0\u00a0RUN";
-  btn.classList.toggle("stopped", !state.running);
+  btn.textContent = G.running?"■\u00a0\u00a0STOP":"▶\u00a0\u00a0RUN";
+  btn.classList.toggle("stopped", !G.running);
   const led = document.getElementById("led-run");
-  led.style.background = state.running ? "var(--green)" : "#1a1a1a";
-  led.style.boxShadow  = state.running ? "0 0 4px var(--green)" : "none";
+  led.style.background = G.running?"#39ff14":"#333";
+  led.style.boxShadow  = G.running?"0 0 4px #39ff14":"none";
 }
 
 function clearScreen() {
-  if (offCtx) { offCtx.fillStyle="#000"; offCtx.fillRect(0,0,W,H); }
+  if (offCtx){offCtx.fillStyle="#000";offCtx.fillRect(0,0,W,H);}
 }
 
 // ── Init ───────────────────────────────────────────────────────────────────
-window.addEventListener("load", () => {
+window.addEventListener("load", ()=>{
   initCanvas();
+  new ResizeObserver(initCanvas).observe(canvas);
 
-  // led run on
+  // sliders global
+  bindSlider("sl-time",  "v-time",  G, "timebase", v=>v.toFixed(1)+"×");
+  bindSlider("sl-noise", "v-noise", G, "noise",    v=>v.toFixed(2));
+  bindSlider("sl-trig",  "v-trig",  G, "trig",     v=>v.toFixed(2));
+
+  // sliders per channel
+  [0,1].forEach(i=>{
+    const ch = CH[i];
+    bindSlider(`sl-freq-ch${i}`, `v-freq-ch${i}`, ch, "freq",  v=>v.toFixed(1)+"Hz");
+    bindSlider(`sl-amp-ch${i}`,  `v-amp-ch${i}`,  ch, "amp",   v=>v.toFixed(2));
+    bindSlider(`sl-gain-ch${i}`, `v-gain-ch${i}`, ch, "gain",  v=>"×"+v.toFixed(1));
+    bindSlider(`sl-yoff-ch${i}`, `v-yoff-ch${i}`, ch, "yOff",  v=>(v>=0?"+":"")+v.toFixed(1));
+
+    // swatches
+    const container = document.getElementById("swatches-ch"+i);
+    PALETTE.forEach(c=>{
+      const s = document.createElement("div");
+      s.className = "swatch" + (c===ch.color?" selected":"");
+      s.dataset.c = c;
+      s.style.background = c;
+      s.style.boxShadow  = `0 0 4px ${c}55`;
+      s.onclick = ()=>setColor(i, c);
+      container.appendChild(s);
+    });
+
+    // init visual state
+    setColor(i, ch.color);
+    updateLED(i);
+  });
+
+  // run LED
   const led = document.getElementById("led-run");
-  led.style.background = "var(--green)";
-  led.style.boxShadow  = "0 0 4px var(--green)";
+  led.style.background = "#39ff14";
+  led.style.boxShadow  = "0 0 4px #39ff14";
 
-  // resize
-  const ro = new ResizeObserver(() => initCanvas());
-  ro.observe(canvas);
+  // init mode tab styles
+  setMode("wave");
 
   requestAnimationFrame(loop);
 });
