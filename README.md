@@ -1,23 +1,16 @@
-# DIDASCOPE
+# oscilloscope
 
 Analog oscilloscope simulator — plain HTML/JS, zero dependencies.
 
-**Live:** <https://scope.didaflow.ai>
+**Live:** <https://lozingaro.github.io/oscilloscope>
 
-## Run
+## Features
 
-Open `index.html` in any browser. No build step, no server needed.
+- Synth waveforms: sine, square, sawtooth, triangle
+- Microphone input with trigger sync
+- Phosphor CRT afterglow effect
+- Mobile-first, works on iPhone (mic requires HTTPS ✓)
 
-For mic input on iPhone, HTTPS is required — GitHub Pages provides it automatically.
+## Run locally
 
-## Deploy
-
-Push `index.html` to a GitHub repo, enable Pages from Settings → Pages → main → / (root).
-
-For a custom domain (`scope.didaflow.ai`), add a CNAME record on Hetzner DNS:
-
-|Type |Name   |Value                |
-|-----|-------|---------------------|
-|CNAME|`scope`|`lozingaro.github.io`|
-
-Then set the custom domain in Settings → Pages.
+Just open `index.html` in any browser.
