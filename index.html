@@ -31,7 +31,6 @@
   <div class="tabbar">
     <button id="tab-wave" class="active" onclick="setMode('wave')">ONDA</button>
     <button id="tab-xy"   onclick="setMode('xy')">X VS Y</button>
-    <button id="tab-draw" onclick="setMode('draw')">DISEGNA</button>
   </div>
 
   <div id="transport">
@@ -40,23 +39,6 @@
 </div>
 
 <div id="controls">
-
-  <!-- Draw mode -->
-  <div class="ch-card" id="draw-card" style="display:none; background:var(--cyan)">
-    <span class="section-label">SCARABOCCHIA E SUONA</span>
-    <p style="font-size:8px; line-height:1.7; color:var(--ink)">
-      Disegna una forma sullo schermo (dito o mouse). Premi SUONA per trasformarla
-      in suono stereo (X = sinistra, Y = destra) e vederla in modo X VS Y.
-    </p>
-    <div class="slider-row">
-      <div class="slider-meta"><span class="sl">FREQ LOOP</span><span class="sv" id="v-dfreq">220Hz</span></div>
-      <input type="range" id="sl-dfreq" min="20" max="1000" step="1" value="220">
-    </div>
-    <div class="seg">
-      <button id="btn-draw-play" onclick="drawConvert()">SUONA</button>
-      <button onclick="resetDraw()">PULISCI</button>
-    </div>
-  </div>
 
   <!-- X-Y combination panel (shown in X VS Y mode) -->
   <div class="ch-card" id="combina-card" style="display:none; background:var(--cyan)">

@@ -26,44 +26,6 @@ function findTrigger(buf, level, hyst=0.02) {
   return 0;
 }
 
-// ── Draw-mode geometry pipeline ──────────────────────────────────────────────
-const clamp1 = v => v < -1 ? -1 : v > 1 ? 1 : v;
-
-// equidistant resampling along a CLOSED path → M points (seamless loop)
-function resamplePath(pts, M) {
-  const p = pts.slice(); p.push(p[0]);          // close the loop
-  const seg = []; let total = 0;
-  for (let i=1; i<p.length; i++) {
-    const d = Math.hypot(p[i].x-p[i-1].x, p[i].y-p[i-1].y);
-    seg.push(d); total += d;
-  }
-  if (total === 0) return Array.from({length:M}, () => ({...p[0]}));
-  const out = []; let si = 0, acc = 0;
-  for (let i=0; i<M; i++) {
-    const target = (i/M)*total;
-    while (si < seg.length-1 && acc + seg[si] < target) { acc += seg[si]; si++; }
-    const t = seg[si] > 0 ? (target-acc)/seg[si] : 0;
-    const a = p[si], b = p[si+1];
-    out.push({ x:a.x+(b.x-a.x)*t, y:a.y+(b.y-a.y)*t });
-  }
-  return out;
-}
-
-// closed Catmull-Rom spline → N smoothed points
-function catmullRom(cp, N) {
-  const m = cp.length, out = new Array(N);
-  for (let i=0; i<N; i++) {
-    const u = (i/N)*m, seg = Math.floor(u), t = u-seg;
-    const p0 = cp[(seg-1+m)%m], p1 = cp[seg%m], p2 = cp[(seg+1)%m], p3 = cp[(seg+2)%m];
-    const t2 = t*t, t3 = t2*t;
-    out[i] = {
-      x: 0.5*((2*p1.x) + (-p0.x+p2.x)*t + (2*p0.x-5*p1.x+4*p2.x-p3.x)*t2 + (-p0.x+3*p1.x-3*p2.x+p3.x)*t3),
-      y: 0.5*((2*p1.y) + (-p0.y+p2.y)*t + (2*p0.y-5*p1.y+4*p2.y-p3.y)*t2 + (-p0.y+3*p1.y-3*p2.y+p3.y)*t3),
-    };
-  }
-  return out;
-}
-
 // ── State ──────────────────────────────────────────────────────────────────
 const G = { timebase:1, noise:0, trig:0, mode:"wave", running:true };
 
@@ -74,26 +36,13 @@ const CH = [
     stream:null, micNode:null, analyser:null, micBuf:null, micOk:false },
 ];
 
-// ── Draw mode state (image → audio → XY) ─────────────────────────────────────
-const DRAW = {
-  active:false,     // sketching on the screen right now
-  playing:false,    // a drawn shape is looping as audio
-  strokes:[],       // array of strokes, each an array of {x,y} device px
-  freq:220,         // loop frequency (Hz) → buffer length = sampleRate / freq
-  N:0,              // samples per loop period (one cycle) for stable rendering
-  saved:null,       // channel state to restore when draw playback ends
-  src:null, splitter:null,
-  tap:[null,null],  // per-channel mono taps (L→ch0, R→ch1) feeding the mixer
-  analyserX:null, analyserY:null,
-};
-
 // ── Mixer / shared audio graph ───────────────────────────────────────────────
 // One AudioContext for everyone. The mixer is PER CHANNEL: whatever source a
-// channel currently uses (synth / mic / draw) is routed into that channel's
+// channel currently uses (synth / mic / line) is routed into that channel's
 // gain, and the two channel gains sum into the master gain → speakers:
 //
-//   ch0 source (osc | mic | drawL) ─► chan[0].gain ─┐
-//   ch1 source (osc | mic | drawR) ─► chan[1].gain ─┴─► master ─► destination
+//   ch0 source (osc | mic | lineL) ─► chan[0].gain ─┐
+//   ch1 source (osc | mic | lineR) ─► chan[1].gain ─┴─► master ─► destination
 //
 // Audibility is governed by the channel gains, so the oscillators can run
 // continuously and mute/volume changes never click (setTargetAtTime ramps).
@@ -142,11 +91,9 @@ function routeChannel(i) {
   const cg = c.gain;
   try { c.osc?.disconnect(cg); }         catch(e){}
   try { CH[i].micNode?.disconnect(cg); } catch(e){}
-  try { DRAW.tap[i]?.disconnect(cg); }   catch(e){}
   try { INPUT.tap[i]?.disconnect(cg); }  catch(e){}
   if      (CH[i].src === "synth") c.osc?.connect(cg);
   else if (CH[i].src === "mic")   CH[i].micNode?.connect(cg);
-  else if (CH[i].src === "draw")  DRAW.tap[i]?.connect(cg);
   else if (CH[i].src === "input") INPUT.tap[i]?.connect(cg);
 }
 
@@ -226,17 +173,6 @@ function getMicBuf(ch) {
 // returns array of values -1..1 for wave mode.
 // freqOverride (optional) replaces the synth visual frequency (used by COMBINA).
 function getWaveSamples(ch, n, freqOverride) {
-  if (ch.src==="draw") {
-    const buf = getMicBuf(ch);
-    if (!buf) return new Float32Array(n);
-    // TRIGGER: lock the start to a rising crossing of the LIVELLO so the wave
-    // stays still on screen instead of sliding. Map over exactly one loop period.
-    const len  = Math.min(DRAW.N || buf.length, buf.length);
-    const off2 = findTrigger(buf, G.trig);
-    const out  = new Float32Array(n);
-    for (let i=0; i<n; i++) out[i] = buf[Math.min(off2 + Math.floor(i/n*len), buf.length-1)] || 0;
-    return out;
-  }
   if (ch.src==="mic" || ch.src==="input") {
     const buf = getMicBuf(ch);
     if (!buf) return new Float32Array(n);
@@ -259,7 +195,7 @@ function getWaveSamples(ch, n, freqOverride) {
   }
 }
 
-// ── Draw modes ─────────────────────────────────────────────────────────────
+// ── Scope renderers ──────────────────────────────────────────────────────────
 function strokePts(c, pts, color, blur, lw) {
   if (pts.length<2) return;
   c.shadowBlur=blur; c.shadowColor=color; c.strokeStyle=color; c.lineWidth=lw;
@@ -354,40 +290,15 @@ function drawGen() {
   offCtx.shadowBlur = 0;
 }
 
-function drawSketch() {
-  const total = DRAW.strokes.reduce((s,st)=>s+st.length, 0);
-  if (total < 1) {
-    // crosshair hint on empty canvas
-    offCtx.strokeStyle="rgba(57,255,20,0.25)"; offCtx.lineWidth=1;
-    offCtx.beginPath(); offCtx.moveTo(W/2,H/2-12); offCtx.lineTo(W/2,H/2+12);
-    offCtx.moveTo(W/2-12,H/2); offCtx.lineTo(W/2+12,H/2); offCtx.stroke();
-    return;
-  }
-  DRAW.strokes.forEach(st => {
-    const path = st.map(p => [p.x, p.y]);
-    strokePts(offCtx, path, "#39ff1433", 0, 5);
-    strokePts(offCtx, path, "#39ff14", 8, 2);
-  });
-}
-
 // ── Render loop ────────────────────────────────────────────────────────────
 function loop(ts) {
   requestAnimationFrame(loop);
-  if (!offCtx) return;
-  // STOP pauses the live signals, but DISEGNA stays interactive so you can keep
-  // sketching whether the scope is running or stopped
-  if (!G.running && G.mode!=="draw") return;
+  if (!offCtx || !G.running) return;
   t0 = ts;
 
-  if (G.mode==="draw") {
-    // full clear each frame so the sketch persists without fading
-    offCtx.fillStyle="#000"; offCtx.fillRect(0,0,W,H);
-    drawSketch();
-  } else {
-    offCtx.fillStyle="rgba(0,0,0,0.2)"; offCtx.fillRect(0,0,W,H);
-    if (G.mode==="wave")    drawWave();
-    else if (G.mode==="xy") { if (GEN.on) drawGen(); else drawXY(); }
-  }
+  offCtx.fillStyle="rgba(0,0,0,0.2)"; offCtx.fillRect(0,0,W,H);
+  if (G.mode==="wave")    drawWave();
+  else if (G.mode==="xy") { if (GEN.on) drawGen(); else drawXY(); }
 
   ctx.fillStyle="#000"; ctx.fillRect(0,0,W,H);
   ctx.drawImage(off,0,0);
@@ -630,150 +541,28 @@ function setGenType(type) {
   refreshChannelCards();
 }
 
-// ── Draw → audio → XY ────────────────────────────────────────────────────────
-// Entering draw mode is non-destructive: an existing sketch is kept so you can
-// return from X-Y, tweak it and re-SUONA. Only PULISCI wipes it.
-function startSketch() {
-  DRAW.active = true;
-}
-
-function resetDraw() {
-  stopDrawAudio();
-  DRAW.strokes = [];
-  DRAW.active = true;
-  clearScreen();
-}
-
-// route a drawn-shape analyser into a channel so the XY renderer picks it up
-function configureDrawChannel(i, analyser, axis) {
-  const ch = CH[i];
-  if (ch.src==="mic") stopMic(ch);   // release any live mic stream/context first
-  ch.src = "draw";
-  ch.analyser = analyser;
-  ch.micBuf = new Float32Array(analyser.fftSize);
-  ch.axis = axis;
-  ch.enabled = true;
-  updateSrcUI(i, "draw");
-  setAxisUI(i, axis);
-  refreshChannelEnabled(i);
-  routeChannel(i);                 // src is now "draw" → feed the draw tap into the mixer
-  // make sure you actually hear it: a drawn shape forces its channels audible
-  AUDIO.chan[i].mute = false;
-  applyChan(i);
-  refreshMuteBtn("ch"+i);
-}
-
-function restoreChannelSynth(i) {
-  const ch = CH[i];
-  ch.src = "synth"; ch.analyser = null; ch.micBuf = null;
-  // restore the channel state we overrode when the drawn signal took over
-  if (DRAW.saved && DRAW.saved[i]) {
-    ch.enabled = DRAW.saved[i].enabled;
-    ch.axis = DRAW.saved[i].axis;
-    AUDIO.chan[i].mute = DRAW.saved[i].mute;
-  }
-  updateSrcUI(i, "synth");
-  setAxisUI(i, ch.axis);
-  refreshChannelEnabled(i);
-  routeChannel(i);                 // back to the synth oscillator
-  applyChan(i);
-  refreshMuteBtn("ch"+i);
-}
-
-function stopDrawAudio() {
-  if (DRAW.src) { try { DRAW.src.stop(); } catch(e){} try { DRAW.src.disconnect(); } catch(e){} }
-  try { DRAW.splitter?.disconnect(); } catch(e){}
-  try { DRAW.tap[0]?.disconnect(); } catch(e){}
-  try { DRAW.tap[1]?.disconnect(); } catch(e){}
-  // the AudioContext is shared (the mixer owns it) → never close it here
-  DRAW.src = DRAW.splitter = null;
-  DRAW.tap = [null,null];
-  DRAW.analyserX = DRAW.analyserY = null;
-  DRAW.playing = false;
-  [0,1].forEach(i => { if (CH[i].src==="draw") restoreChannelSynth(i); });
-  DRAW.saved = null;
-}
-
-// the full pipeline: sketch → sorted path → resample → spline → stereo loop → XY
-async function drawConvert() {
-  const P0 = DRAW.strokes.flat();
-  if (P0.length < 4) { alert("Disegna prima una forma!"); return; }
-  stopDrawAudio();
-
-  // normalise on the DRAWING's own bounding box (not the screen): centre it and
-  // scale to fill ~95% of -1..1 keeping aspect ratio. This makes the audio loud
-  // and consistent regardless of how big/where you drew, and centres the figure.
-  let P = P0.map(p => ({ x:p.x, y:p.y }));
-  let minX=Infinity, maxX=-Infinity, minY=Infinity, maxY=-Infinity;
-  for (const p of P) { minX=Math.min(minX,p.x); maxX=Math.max(maxX,p.x); minY=Math.min(minY,p.y); maxY=Math.max(maxY,p.y); }
-  const cxp=(minX+maxX)/2, cyp=(minY+maxY)/2;
-  const half = Math.max((maxX-minX)/2, (maxY-minY)/2) || 1;
-  const k = 0.95/half;
-  // KEEP the drawing order: the stroke is already a continuous path, so we trace
-  // it as drawn. (Nearest-neighbour re-sorting used to scramble shapes like a
-  // heart — jumping across the dip/lobes — wrecking the reproduction.)
-  P = P.map(p => ({ x:(p.x-cxp)*k, y:-(p.y-cyp)*k }));
-
-  const actx = ensureAudio();
-  if (actx.state==="suspended") await actx.resume();
-
-  const N = Math.max(64, Math.round(actx.sampleRate / DRAW.freq));
-  DRAW.N = N;
-  // control points: keep more detail (and never more than one per output sample).
-  // Lower FREQ LOOP → larger N → higher fidelity for complex shapes.
-  const M = Math.min(1024, N, Math.max(8, P.length));
-  const smooth = catmullRom(resamplePath(P, M), N);
-
-  const buf = actx.createBuffer(2, N, actx.sampleRate);
-  const L = buf.getChannelData(0), R = buf.getChannelData(1);
-  for (let i=0; i<N; i++) { L[i] = clamp1(smooth[i].x); R[i] = clamp1(smooth[i].y); }
-
-  const src = actx.createBufferSource(); src.buffer = buf; src.loop = true;
-  const splitter = actx.createChannelSplitter(2);
-  const aX = actx.createAnalyser(); aX.fftSize = 4096; aX.smoothingTimeConstant = 0;
-  const aY = actx.createAnalyser(); aY.fftSize = 4096; aY.smoothingTimeConstant = 0;
-  src.connect(splitter);
-  splitter.connect(aX, 0);   // scope tap, X
-  splitter.connect(aY, 1);   // scope tap, Y
-  // per-channel mono audio taps: X → channel 1, Y → channel 2. routeChannel()
-  // connects these into each channel's mixer gain (it's oscilloscope music).
-  const tapL = actx.createGain(); splitter.connect(tapL, 0);
-  const tapR = actx.createGain(); splitter.connect(tapR, 1);
-  src.start();
-
-  Object.assign(DRAW, { src, splitter, tap:[tapL,tapR], analyserX:aX, analyserY:aY, playing:true });
-  // remember channel state so we can restore it when playback ends
-  DRAW.saved = [0,1].map(i => ({ enabled:CH[i].enabled, axis:CH[i].axis, mute:AUDIO.chan[i].mute }));
-  configureDrawChannel(0, aX, "x");
-  configureDrawChannel(1, aY, "y");
-  if (!G.running) toggleRun();   // SUONA resumes play if the scope was paused
-  // stay in DISEGNA: the shape plays here; switch to X VS Y / ONDA tabs to view it
-}
 
 // ── Controls ───────────────────────────────────────────────────────────────
 function setMode(m) {
-  // a drawn shape survives every view; the X-Y generative engines run only in X-Y.
+  // the X-Y generative engines run only in X-Y
   if (m !== "xy") stopGen();
   G.mode = m;
-  if (m !== "draw") DRAW.active = false;
-  ["wave","xy","draw"].forEach(id => {
+  ["wave","xy"].forEach(id => {
     const btn = document.getElementById("tab-"+id);
     btn.className = m===id?"active":"";
     btn.style.color = m===id?"#39ff14":"#555";
     btn.style.boxShadow = m===id?"inset 0 -2px 0 #39ff14":"none";
   });
-  const label = { wave:"ONDA", xy:"X-Y", draw:"DISEGNA" }[m] || m.toUpperCase();
+  const label = { wave:"ONDA", xy:"X-Y" }[m] || m.toUpperCase();
   document.getElementById("screen-label").textContent = label;
-  // axis pickers only matter in X-Y; SU-GIU' (vertical offset) only in ONDA/DISEGNA
+  // axis pickers only matter in X-Y; SU-GIU' (vertical offset) only in ONDA
   [0,1].forEach(i => {
     document.getElementById("axis-row-ch"+i).style.display = m==="xy"?"block":"none";
     document.getElementById("yoff-row-ch"+i).style.display = m==="xy"?"none":"flex";
   });
-  document.getElementById("draw-card").style.display = m==="draw"?"":"none";
   document.getElementById("combina-card").style.display = m==="xy"?"":"none";
   if (m === "xy") applyGenMode();        // start engine / show channels per COMBINA type
-  if (m === "draw") startSketch();
-  else clearScreen();
+  clearScreen();
   refreshChannelCards();
 }
 
@@ -810,7 +599,7 @@ function toggleCh(i) {
 
 function updateSrcUI(i, val) {
   const ch = CH[i];
-  // seg buttons (no button matches "draw" → both inactive, signalling external src)
+  // highlight the active source button
   document.querySelectorAll("#src-ch"+i+" button").forEach(b=>{
     const a = b.dataset.v===val;
     b.className = a?"active":"";
@@ -829,7 +618,6 @@ async function setSrc(i, btn) {
   const val = btn.dataset.v;
   if (val===ch.src) return;
   // tear down whatever this channel was using
-  if (ch.src==="draw")  stopDrawAudio();
   if (ch.src==="mic")   stopMic(ch);
   if (ch.src==="input") detachInput(i);
 
@@ -967,7 +755,6 @@ function toggleFullscreen() {
 }
 
 function clearScreen() {
-  if (DRAW.active) DRAW.strokes = [];
   if (offCtx){offCtx.fillStyle="#000";offCtx.fillRect(0,0,W,H);}
 }
 
@@ -975,9 +762,6 @@ function clearScreen() {
 window.addEventListener("load", ()=>{
   initCanvas();
   new ResizeObserver(initCanvas).observe(canvas);
-
-  // sliders global
-  bindSlider("sl-dfreq", "v-dfreq", DRAW, "freq",  v=>v.toFixed(0)+"Hz");
 
   // generative engine knobs
   bindSlider("sl-gbase",  "v-gbase",  GEN, "base",  v=>v.toFixed(0)+"Hz");
@@ -999,29 +783,6 @@ window.addEventListener("load", ()=>{
       }
     });
   });
-
-  // drawing input
-  let sketching = false;
-  const sketchPoint = e => {
-    if (G.mode!=="draw" || !DRAW.active) return;
-    const stroke = DRAW.strokes[DRAW.strokes.length-1];
-    if (!stroke) return;
-    const rect = canvas.getBoundingClientRect();
-    const x = (e.clientX-rect.left)/rect.width*W;
-    const y = (e.clientY-rect.top)/rect.height*H;
-    const last = stroke[stroke.length-1];
-    if (!last || Math.hypot(x-last.x, y-last.y) > Math.max(1.5, W*0.002)) stroke.push({x,y});
-  };
-  canvas.addEventListener("pointerdown", e=>{
-    if (G.mode!=="draw") return;
-    sketching = true;
-    DRAW.strokes.push([]);          // start a new stroke (multi-stroke shapes)
-    canvas.setPointerCapture?.(e.pointerId);
-    sketchPoint(e); e.preventDefault();
-  });
-  canvas.addEventListener("pointermove", e=>{ if (sketching){ sketchPoint(e); e.preventDefault(); } });
-  canvas.addEventListener("pointerup",   ()=>{ sketching = false; });
-  canvas.addEventListener("pointercancel", ()=>{ sketching = false; });
 
   // sliders per channel
   [0,1].forEach(i=>{
