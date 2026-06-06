@@ -85,7 +85,7 @@ const DRAW = {
   active:false,     // sketching on the screen right now
   playing:false,    // a drawn shape is looping as audio
   strokes:[],       // array of strokes, each an array of {x,y} device px
-  freq:55,          // loop frequency (Hz) → buffer length = sampleRate / freq
+  freq:220,         // loop frequency (Hz) → buffer length = sampleRate / freq
   N:0,              // samples per loop period (one cycle) for stable rendering
   saved:null,       // channel state to restore when draw playback ends
   actx:null, src:null, splitter:null, merger:null, gain:null,
@@ -386,7 +386,7 @@ function stopDrawAudio() {
 }
 
 // the full pipeline: sketch → sorted path → resample → spline → stereo loop → XY
-function drawConvert() {
+async function drawConvert() {
   const P0 = DRAW.strokes.flat();
   if (P0.length < 4) { alert("Disegna prima una forma!"); return; }
   stopDrawAudio();
@@ -397,7 +397,7 @@ function drawConvert() {
   P = sortPoints(P);
 
   const actx = new (window.AudioContext||window.webkitAudioContext)();
-  if (actx.state==="suspended") actx.resume();
+  if (actx.state==="suspended") await actx.resume();
 
   const N = Math.max(64, Math.round(actx.sampleRate / DRAW.freq));
   DRAW.N = N;
@@ -419,7 +419,7 @@ function drawConvert() {
   const merger = actx.createChannelMerger(2);
   splitter.connect(merger, 0, 0);
   splitter.connect(merger, 1, 1);
-  const gain = actx.createGain(); gain.gain.value = 0.25;
+  const gain = actx.createGain(); gain.gain.value = 0.4;
   merger.connect(gain).connect(actx.destination);
   src.start();
 
