@@ -591,9 +591,10 @@ function setMode(m) {
   const label = { wave:"ONDA", xy:"X-Y", draw:"DISEGNA" }[m] || m.toUpperCase();
   document.getElementById("mode-label").textContent = label;
   document.getElementById("screen-label").textContent = "● "+label;
-  // show/hide axis rows + draw card
+  // axis pickers only matter in X-Y; SU-GIU' (vertical offset) only in ONDA/DISEGNA
   [0,1].forEach(i => {
     document.getElementById("axis-row-ch"+i).style.display = m==="xy"?"block":"none";
+    document.getElementById("yoff-row-ch"+i).style.display = m==="xy"?"none":"flex";
   });
   document.getElementById("draw-card").style.display = m==="draw"?"":"none";
   if (m === "draw") startSketch();
@@ -738,6 +739,8 @@ function toggleRun() {
   const led = document.getElementById("led-run");
   led.style.background = G.running?"#39ff14":"#333";
   led.style.boxShadow  = G.running?"0 0 4px #39ff14":"none";
+  // STOP/RUN double as audio pause/play: suspend/resume the whole engine
+  if (AUDIO.ctx) { G.running ? AUDIO.ctx.resume() : AUDIO.ctx.suspend(); }
 }
 
 function clearScreen() {
