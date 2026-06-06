@@ -179,25 +179,6 @@ function refreshMuteBtn(key) {
   btn.classList.toggle("muted", muted);
 }
 
-// Diagnostic: play a plain 440 Hz beep straight into the master bus for ~0.5 s.
-// If you hear THIS but not a drawn shape → routing bug. If you hear nothing at
-// all → the AudioContext/output/device is the problem, not the draw code.
-function audioTest() {
-  const ctx = ensureAudio();
-  const go = () => {
-    const osc = ctx.createOscillator(); osc.type = "sine"; osc.frequency.value = 440;
-    const g = ctx.createGain(); g.gain.value = 0;
-    osc.connect(g); g.connect(AUDIO.master);
-    const t = ctx.currentTime;
-    g.gain.setValueAtTime(0, t);
-    g.gain.linearRampToValueAtTime(0.4, t+0.02);
-    g.gain.setValueAtTime(0.4, t+0.45);
-    g.gain.linearRampToValueAtTime(0, t+0.5);
-    osc.start(t); osc.stop(t+0.52);
-  };
-  if (ctx.state==="suspended") ctx.resume().then(go); else go();
-}
-
 // ── Canvas ─────────────────────────────────────────────────────────────────
 const canvas = document.getElementById("scope");
 const ctx    = canvas.getContext("2d");
@@ -761,6 +742,7 @@ function setColor(i, color) {
 
 function updateLED(i) {
   const led = document.getElementById("led-ch"+(i+1));
+  if (!led) return;
   const ch  = CH[i];
   led.style.background = ch.enabled ? ch.color : "#1a1a1a";
   led.style.boxShadow  = ch.enabled ? `0 0 4px ${ch.color}` : "none";
@@ -782,8 +764,10 @@ function toggleRun() {
   btn.textContent = G.running?"FERMA":"VAI";
   btn.classList.toggle("stopped", !G.running);
   const led = document.getElementById("led-run");
-  led.style.background = G.running?"#39ff14":"#333";
-  led.style.boxShadow  = G.running?"0 0 4px #39ff14":"none";
+  if (led) {
+    led.style.background = G.running?"#39ff14":"#333";
+    led.style.boxShadow  = G.running?"0 0 4px #39ff14":"none";
+  }
   // STOP/RUN double as audio pause/play: suspend/resume the whole engine
   if (AUDIO.ctx) { G.running ? AUDIO.ctx.resume() : AUDIO.ctx.suspend(); }
 }
@@ -903,11 +887,6 @@ window.addEventListener("load", ()=>{
   });
   bindMixVol(null, "vol-master", "vv-master");
   refreshMuteBtn("master");
-
-  // run LED
-  const led = document.getElementById("led-run");
-  led.style.background = "#39ff14";
-  led.style.boxShadow  = "0 0 4px #39ff14";
 
   // init mode tab styles
   setMode("wave");
