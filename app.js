@@ -113,6 +113,7 @@ const DRAW = {
 const AUDIO = {
   ctx:null, master:null,
   masterVol:0.7, masterMute:false,
+  meter:null, meterBuf:null,        // analyser on the master bus → on-screen VU
   chan:[
     { vol:0.6, mute:true, gain:null, osc:null },   // muted by default → silent start
     { vol:0.6, mute:true, gain:null, osc:null },
@@ -130,6 +131,10 @@ function ensureAudio() {
   AUDIO.master = ctx.createGain();
   AUDIO.master.gain.value = AUDIO.masterMute ? 0 : AUDIO.masterVol;
   AUDIO.master.connect(ctx.destination);
+  // tap the master bus to drive an on-screen VU meter (diagnostic + nice to have)
+  AUDIO.meter = ctx.createAnalyser(); AUDIO.meter.fftSize = 1024;
+  AUDIO.meterBuf = new Float32Array(AUDIO.meter.fftSize);
+  AUDIO.master.connect(AUDIO.meter);
   AUDIO.chan.forEach((c,i) => {
     c.gain = ctx.createGain();
     c.gain.gain.value = 0;            // applyChan sets the real value below
@@ -190,6 +195,40 @@ function refreshMuteBtn(key) {
   btn.classList.toggle("muted", muted);
 }
 
+// Diagnostic: play a plain 440 Hz beep straight into the master bus for ~0.5 s.
+// If you hear THIS but not a drawn shape → routing bug. If you hear nothing at
+// all → the AudioContext/output/device is the problem, not the draw code.
+function audioTest() {
+  const ctx = ensureAudio();
+  const go = () => {
+    const osc = ctx.createOscillator(); osc.type = "sine"; osc.frequency.value = 440;
+    const g = ctx.createGain(); g.gain.value = 0;
+    osc.connect(g); g.connect(AUDIO.master);
+    const t = ctx.currentTime;
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.4, t+0.02);
+    g.gain.setValueAtTime(0.4, t+0.45);
+    g.gain.linearRampToValueAtTime(0, t+0.5);
+    osc.start(t); osc.stop(t+0.52);
+  };
+  if (ctx.state==="suspended") ctx.resume().then(go); else go();
+}
+
+// refresh the master VU bar + AudioContext state readout each frame
+function updateAudioUI() {
+  const stEl = document.getElementById("audio-state");
+  if (stEl) stEl.textContent = AUDIO.ctx ? AUDIO.ctx.state : "off";
+  const vu = document.getElementById("vu-master");
+  if (!vu) return;
+  let rms = 0;
+  if (AUDIO.meter && AUDIO.ctx && AUDIO.ctx.state==="running") {
+    AUDIO.meter.getFloatTimeDomainData(AUDIO.meterBuf);
+    let s = 0; for (let i=0;i<AUDIO.meterBuf.length;i++) s += AUDIO.meterBuf[i]*AUDIO.meterBuf[i];
+    rms = Math.sqrt(s/AUDIO.meterBuf.length);
+  }
+  vu.style.width = Math.min(100, rms*140).toFixed(0) + "%";
+}
+
 // ── Canvas ─────────────────────────────────────────────────────────────────
 const canvas = document.getElementById("scope");
 const ctx    = canvas.getContext("2d");
@@ -239,11 +278,12 @@ function getWaveSamples(ch, n) {
   if (ch.src==="draw") {
     const buf = getMicBuf(ch);
     if (!buf) return new Float32Array(n);
-    // map over exactly one loop period (N) — the shape is closed, so any phase
-    // start traces the same curve → stable, flicker-free, no overlaid copies
-    const len = Math.min(DRAW.N || buf.length, buf.length);
-    const out = new Float32Array(n);
-    for (let i=0; i<n; i++) out[i] = buf[Math.floor(i/n*len)] || 0;
+    // TRIGGER: lock the start to a rising crossing of the LIVELLO so the wave
+    // stays still on screen instead of sliding. Map over exactly one loop period.
+    const len  = Math.min(DRAW.N || buf.length, buf.length);
+    const off2 = findTrigger(buf, G.trig);
+    const out  = new Float32Array(n);
+    for (let i=0; i<n; i++) out[i] = buf[Math.min(off2 + Math.floor(i/n*len), buf.length-1)] || 0;
     return out;
   }
   if (ch.src==="mic") {
@@ -303,17 +343,31 @@ function drawXY() {
   const marginX  = W/2-8;
   const marginY  = H/2-8;
 
-  // color: blend or use whichever is active
-  // the X-Y trace is a single curve, so it gets a single colour: blend both
-  // channels so changing either CANALE colour is reflected on screen
-  const col = (xCh && yCh) ? blendHex(xCh.color, yCh.color) : (xCh ? xCh.color : yCh.color);
-
   const pts = Array.from({length:n}, (_,i) => [
     W/2 + samplesX[i]*marginX,
     H/2 - samplesY[i]*marginY,
   ]);
-  strokePts(offCtx, pts, col+"33", 0, 4);
-  strokePts(offCtx, pts, col, 8, 1.5);
+
+  if (xCh && yCh) {
+    // two channels → a spatial gradient from CANALE 1 (X) colour to CANALE 2 (Y)
+    // colour, so both colours are visible and either one affects the trace
+    const grad = offCtx.createLinearGradient(0, 0, W, H);
+    grad.addColorStop(0, xCh.color);
+    grad.addColorStop(1, yCh.color);
+    const glow = blendHex(xCh.color, yCh.color);
+    const trace = lw => {
+      offCtx.beginPath();
+      pts.forEach(([x,y],i)=> i?offCtx.lineTo(x,y):offCtx.moveTo(x,y));
+      offCtx.lineWidth = lw; offCtx.stroke();
+    };
+    offCtx.shadowBlur = 0;  offCtx.strokeStyle = glow+"33"; trace(4);          // soft underlay
+    offCtx.shadowBlur = 8;  offCtx.shadowColor = glow; offCtx.strokeStyle = grad; trace(1.5);
+    offCtx.shadowBlur = 0;
+  } else {
+    const col = xCh ? xCh.color : yCh.color;
+    strokePts(offCtx, pts, col+"33", 0, 4);
+    strokePts(offCtx, pts, col, 8, 1.5);
+  }
 }
 
 function drawSketch() {
@@ -363,6 +417,8 @@ function loop(ts) {
   const vg=ctx.createRadialGradient(W/2,H/2,H*.2,W/2,H/2,H*.8);
   vg.addColorStop(0,"transparent"); vg.addColorStop(1,"rgba(0,0,0,0.55)");
   ctx.fillStyle=vg; ctx.fillRect(0,0,W,H);
+
+  updateAudioUI();
 }
 
 // ── Mic ────────────────────────────────────────────────────────────────────
