@@ -582,8 +582,8 @@ async function drawConvert() {
   DRAW.saved = [0,1].map(i => ({ enabled:CH[i].enabled, axis:CH[i].axis, mute:AUDIO.chan[i].mute }));
   configureDrawChannel(0, aX, "x");
   configureDrawChannel(1, aY, "y");
-  if (!G.running) toggleRun();   // SUONA from a stopped scope resumes play so you see+hear it
-  setMode("xy");
+  if (!G.running) toggleRun();   // SUONA resumes play if the scope was paused
+  // stay in DISEGNA: the shape plays here; switch to X VS Y / ONDA tabs to view it
 }
 
 // ── Controls ───────────────────────────────────────────────────────────────
