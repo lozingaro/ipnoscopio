@@ -1,6 +1,10 @@
 // ── Palette ────────────────────────────────────────────────────────────────
 const PALETTE = ["#39ff14","#00cfff","#ff6b35","#ffdd00","#ff3399","#aa44ff","#ffffff","#ff4444"];
 
+// STRILLO (audible pitch, Hz) → number of wave cycles drawn on screen.
+// One knob for both: turn it up and the tone rises AND the wave gets busier.
+const visCycles = p => Math.min(20, Math.max(1, p/55));
+
 // average two #rrggbb colours → a single blended #rrggbb
 function blendHex(a, b) {
   const ch = (h,i) => parseInt(h.slice(1+i*2, 3+i*2), 16);
@@ -527,9 +531,16 @@ async function drawConvert() {
   if (P0.length < 4) { alert("Disegna prima una forma!"); return; }
   stopDrawAudio();
 
-  // normalise to -1..1 preserving aspect ratio (centre of screen = origin)
-  const s = 2/Math.max(W,H);
-  let P = P0.map(p => ({ x:(p.x-W/2)*s, y:-(p.y-H/2)*s }));
+  // normalise on the DRAWING's own bounding box (not the screen): centre it and
+  // scale to fill ~95% of -1..1 keeping aspect ratio. This makes the audio loud
+  // and consistent regardless of how big/where you drew, and centres the figure.
+  let P = P0.map(p => ({ x:p.x, y:p.y }));
+  let minX=Infinity, maxX=-Infinity, minY=Infinity, maxY=-Infinity;
+  for (const p of P) { minX=Math.min(minX,p.x); maxX=Math.max(maxX,p.x); minY=Math.min(minY,p.y); maxY=Math.max(maxY,p.y); }
+  const cxp=(minX+maxX)/2, cyp=(minY+maxY)/2;
+  const half = Math.max((maxX-minX)/2, (maxY-minY)/2) || 1;
+  const k = 0.95/half;
+  P = P.map(p => ({ x:(p.x-cxp)*k, y:-(p.y-cyp)*k }));
   P = sortPoints(P);
 
   const actx = ensureAudio();
@@ -617,7 +628,6 @@ function updateSrcUI(i, val) {
     b.style.borderColor = a?ch.color:"#2a2a2a";
   });
   document.getElementById("synth-ch"+i).style.display     = val==="synth"?"block":"none";
-  document.getElementById("freq-row-ch"+i).style.display  = val==="synth"?"flex":"none";
   document.getElementById("amp-row-ch"+i).style.display   = val==="synth"?"flex":"none";
   document.getElementById("pitch-row-ch"+i).style.display = val==="synth"?"flex":"none";
   document.getElementById("gain-row-ch"+i).style.display  = val==="mic"?"flex":"none";
@@ -691,12 +701,12 @@ function setColor(i, color) {
   const mixName = document.getElementById("mixname-ch"+i);
   if (mixName) mixName.style.color = color;
   // update slider accent
-  ["sl-freq-ch"+i,"sl-amp-ch"+i,"sl-pitch-ch"+i,"sl-gain-ch"+i,"sl-yoff-ch"+i].forEach(id=>{
+  ["sl-amp-ch"+i,"sl-pitch-ch"+i,"sl-gain-ch"+i,"sl-yoff-ch"+i].forEach(id=>{
     const el = document.getElementById(id);
     if (el) el.style.accentColor = color;
   });
   // update value displays
-  ["v-freq-ch"+i,"v-amp-ch"+i,"v-pitch-ch"+i,"v-gain-ch"+i,"v-yoff-ch"+i].forEach(id=>{
+  ["v-amp-ch"+i,"v-pitch-ch"+i,"v-gain-ch"+i,"v-yoff-ch"+i].forEach(id=>{
     const el = document.getElementById(id);
     if (el) el.style.color = color;
   });
@@ -772,15 +782,18 @@ window.addEventListener("load", ()=>{
   // sliders per channel
   [0,1].forEach(i=>{
     const ch = CH[i];
-    bindSlider(`sl-freq-ch${i}`, `v-freq-ch${i}`, ch, "freq",  v=>v.toFixed(1)+"Hz");
     bindSlider(`sl-amp-ch${i}`,  `v-amp-ch${i}`,  ch, "amp",   v=>v.toFixed(2));
     bindSlider(`sl-pitch-ch${i}`,`v-pitch-ch${i}`,ch, "pitch", v=>v.toFixed(0)+"Hz");
     bindSlider(`sl-gain-ch${i}`, `v-gain-ch${i}`, ch, "gain",  v=>"×"+v.toFixed(1));
     bindSlider(`sl-yoff-ch${i}`, `v-yoff-ch${i}`, ch, "yOff",  v=>(v>=0?"+":"")+v.toFixed(1));
-    // live-update the audio oscillator pitch (visual freq stays independent)
+    // STRILLO is one knob: it sets the audible pitch AND the on-screen wave
+    // density (higher pitch → busier wave), so there's no separate FREQ control.
+    ch.freq = visCycles(ch.pitch);
     document.getElementById(`sl-pitch-ch${i}`).addEventListener("input", e=>{
+      const p = parseFloat(e.target.value);
+      ch.freq = visCycles(p);
       const s = AUDIO.chan[i];
-      if (s.osc) s.osc.frequency.setTargetAtTime(parseFloat(e.target.value), AUDIO.ctx.currentTime, 0.01);
+      if (s.osc) s.osc.frequency.setTargetAtTime(p, AUDIO.ctx.currentTime, 0.01);
     });
 
     // swatches
