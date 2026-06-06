@@ -538,7 +538,36 @@ function applyPreset(name) {
     if (sl) sl.value=pitch; if (vv) vv.textContent=pitch.toFixed(0)+"Hz";
     buildChannelSynth(i); renderPartials(i);
   });
+  if (name==="reset") resetEverything();   // RESET wipes MODULA + synth params too
   highlightPreset(name);          // light up the chosen preset button
+}
+
+// helper: set a slider's value + its readout label
+function setSliderUI(slId, vvId, val, fmt) {
+  const s=document.getElementById(slId), v=document.getElementById(vvId);
+  if (s) s.value=val; if (v) v.textContent=fmt(val);
+}
+
+// full reset of everything RESET should touch beyond the oscillators: the MODULA
+// movement/rhythm layer and the per-channel synth params (amp, gain, offset, wave)
+function resetEverything() {
+  MOD.rot=0; MOD.pulse=0; MOD.doppio=0; MOD.tragitto=0;
+  setSliderUI("sl-mrot","v-mrot",0,v=>v.toFixed(2));
+  setSliderUI("sl-mpulse","v-mpulse",0,v=>v.toFixed(1));
+  setSliderUI("sl-mdop","v-mdop",0,v=>v.toFixed(2));
+  setSliderUI("sl-mtrag","v-mtrag",0,v=>v.toFixed(2));
+  [0,1].forEach(i=>{
+    const ch=CH[i];
+    ch.amp=0.75; ch.gain=2; ch.yOff=0; ch.waveform="sine";
+    setSliderUI(`sl-amp-ch${i}`,`v-amp-ch${i}`,0.75,v=>v.toFixed(2));
+    setSliderUI(`sl-gain-ch${i}`,`v-gain-ch${i}`,2,v=>"×"+v.toFixed(1));
+    setSliderUI(`sl-yoff-ch${i}`,`v-yoff-ch${i}`,0,v=>(v>=0?"+":"")+v.toFixed(1));
+    const seg=document.querySelector(`#synth-ch${i} .seg`);
+    if (seg) seg.querySelectorAll("button").forEach(b=>{
+      const a=b.dataset.w==="sine"; b.className=a?"active":""; applySegStyle(b,a,ch.color);
+    });
+    AUDIO.chan[i]?.parts.forEach(pt=>{ if(pt.osc) pt.osc.type="sine"; });
+  });
 }
 
 // mark one preset button active (or clear all when the user edits by hand)
