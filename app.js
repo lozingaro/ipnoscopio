@@ -82,8 +82,25 @@ function ensureAudio() {
     routeChannel(i);                 // wire the channel's current source in
     applyChan(i);
   });
+  // SDOPPIA audio: a wet, modulated delayed copy of the program (chorus → echo)
+  AUDIO.doppiaDelay = ctx.createDelay(0.1); AUDIO.doppiaDelay.delayTime.value = 0.025;
+  AUDIO.doppiaWet   = ctx.createGain();     AUDIO.doppiaWet.gain.value = 0;
+  AUDIO.master.connect(AUDIO.doppiaDelay).connect(AUDIO.doppiaWet).connect(ctx.destination);
+  AUDIO.doppiaLFO   = ctx.createOscillator(); AUDIO.doppiaLFO.frequency.value = 0.8;
+  AUDIO.doppiaDepth = ctx.createGain();       AUDIO.doppiaDepth.gain.value = 0;
+  AUDIO.doppiaLFO.connect(AUDIO.doppiaDepth).connect(AUDIO.doppiaDelay.delayTime);
+  AUDIO.doppiaLFO.start();
+  applyDoppiaAudio();
   if (ctx.state==="suspended") ctx.resume();
   return ctx;
+}
+
+// SDOPPIA → audible doubling: wet level + chorus depth scale with MOD.doppio
+function applyDoppiaAudio() {
+  if (!AUDIO.doppiaWet) return;
+  const t = AUDIO.ctx.currentTime, d = MOD.doppio;
+  AUDIO.doppiaWet.gain.setTargetAtTime(d*0.5, t, 0.05);     // wet copy level
+  AUDIO.doppiaDepth.gain.setTargetAtTime(d*0.004, t, 0.05); // ±4ms chorus sweep
 }
 
 // (re)build the additive oscillator bank for a synth channel from CH[i].partials.
@@ -556,6 +573,7 @@ function resetEverything() {
   setSliderUI("sl-mpulse","v-mpulse",0,v=>v.toFixed(1));
   setSliderUI("sl-mdop","v-mdop",0,v=>v.toFixed(2));
   setSliderUI("sl-mtrag","v-mtrag",0,v=>v.toFixed(2));
+  applyDoppiaAudio();                       // kill the wet copy on reset
   [0,1].forEach(i=>{
     const ch=CH[i];
     ch.amp=0.75; ch.gain=2; ch.yOff=0; ch.waveform="sine";
@@ -763,6 +781,7 @@ window.addEventListener("load", ()=>{
   bindSlider("sl-mrot",   "v-mrot",   MOD, "rot",      v=>v.toFixed(2));
   bindSlider("sl-mpulse", "v-mpulse", MOD, "pulse",    v=>v.toFixed(1));
   bindSlider("sl-mdop",   "v-mdop",   MOD, "doppio",   v=>v.toFixed(2));
+  document.getElementById("sl-mdop").addEventListener("input", applyDoppiaAudio);
   bindSlider("sl-mtrag",  "v-mtrag",  MOD, "tragitto", v=>v.toFixed(2));
 
   // line-input device picker: switch interface and re-point the active channels
