@@ -16,12 +16,17 @@
 }
 
 html, body {
-  height: 100%;
   background: var(--bg);
   color: var(--ink);
   font-family: 'Press Start 2P', 'Courier New', monospace;
   font-size: 10px;
 }
+
+/* The page itself (html) is the scroller. Keep overflow-x hidden HERE, not on
+   body — on body it silently breaks position:sticky for #stage. body must grow
+   with its content (min-height, no fixed height) so the sticky stage can pin
+   across the whole scroll. */
+html { height: 100%; overflow-x: hidden; }
 
 body {
   display: flex;
@@ -29,7 +34,6 @@ body {
   padding: 10px 10px 28px;
   gap: 8px;
   min-height: 100dvh;
-  overflow-x: hidden;
   /* notebook lines */
   background-image: repeating-linear-gradient(
     transparent, transparent 23px,
@@ -108,6 +112,37 @@ canvas {
   height: clamp(160px, 36vw, 300px);
   image-rendering: pixelated;
   touch-action: none; /* allow drawing gestures without page scroll */
+}
+
+/* fullscreen toggle button, overlaid on the scope */
+#btn-fs {
+  position: absolute;
+  bottom: 8px; right: 10px;
+  width: 30px; height: 30px;
+  background: rgba(0,0,0,0.55);
+  color: #39ff14;
+  border: 2px solid #39ff14;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 12px; line-height: 1;
+  cursor: pointer;
+  z-index: 6;
+  -webkit-tap-highlight-color: transparent;
+}
+#btn-fs:active { transform: translate(1px,1px); }
+
+/* fake fullscreen: works everywhere (incl. iPhone, which blocks the native API
+   on non-video elements) */
+#screen-wrap.fs {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  padding: 0;
+  border: 0;
+  box-shadow: none;
+}
+#screen-wrap.fs canvas {
+  width: 100vw;
+  height: 100dvh;
 }
 
 #screen-label {

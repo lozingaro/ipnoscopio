@@ -117,6 +117,7 @@ const DRAW = {
 const AUDIO = {
   ctx:null, master:null,
   masterVol:0.7, masterMute:false,
+  noiseGain:null,                   // global white-noise level → master
   chan:[
     { vol:0.6, mute:true, gain:null, osc:null },   // muted by default → silent start
     { vol:0.6, mute:true, gain:null, osc:null },
@@ -126,6 +127,9 @@ const AUDIO = {
 // Waveform names already match OscillatorNode.type values 1:1.
 const oscType = wf => wf;
 
+// RUMORE slider (0..1) → white-noise gain into the master (kept modest)
+const NOISE_AUDIO = 0.25;
+
 // Create the shared context + graph on first use (must run inside a user gesture).
 function ensureAudio() {
   if (AUDIO.ctx) { if (AUDIO.ctx.state==="suspended") AUDIO.ctx.resume(); return AUDIO.ctx; }
@@ -134,6 +138,15 @@ function ensureAudio() {
   AUDIO.master = ctx.createGain();
   AUDIO.master.gain.value = AUDIO.masterMute ? 0 : AUDIO.masterVol;
   AUDIO.master.connect(ctx.destination);
+  // global white noise: a looping random buffer → its own gain → master
+  const nbuf = ctx.createBuffer(1, ctx.sampleRate*2, ctx.sampleRate);
+  const nd = nbuf.getChannelData(0);
+  for (let i=0;i<nd.length;i++) nd[i] = Math.random()*2-1;
+  const nsrc = ctx.createBufferSource(); nsrc.buffer = nbuf; nsrc.loop = true;
+  AUDIO.noiseGain = ctx.createGain();
+  AUDIO.noiseGain.gain.value = G.noise*NOISE_AUDIO;
+  nsrc.connect(AUDIO.noiseGain); AUDIO.noiseGain.connect(AUDIO.master);
+  nsrc.start();
   AUDIO.chan.forEach((c,i) => {
     c.gain = ctx.createGain();
     c.gain.gain.value = 0;            // applyChan sets the real value below
@@ -306,7 +319,7 @@ function drawWave() {
     if (!ch.enabled) return;
     const samples = getWaveSamples(ch, n);
     const pts = Array.from({length:n}, (_,i) => {
-      const noise = (Math.random()-.5)*G.noise*2;
+      const noise = (Math.random()-.5)*G.noise*0.3;   // visual grain echoes the audible noise
       const y = (samples[i]+noise);
       return [(i/(n-1))*W, H/2 - y*margin + ch.yOff*(H/8)];
     });
@@ -373,7 +386,10 @@ function drawSketch() {
 // ── Render loop ────────────────────────────────────────────────────────────
 function loop(ts) {
   requestAnimationFrame(loop);
-  if (!G.running||!offCtx) return;
+  if (!offCtx) return;
+  // STOP pauses the live signals, but DISEGNA stays interactive so you can keep
+  // sketching whether the scope is running or stopped
+  if (!G.running && G.mode!=="draw") return;
   t0 = ts;
 
   if (G.mode==="draw") {
@@ -384,14 +400,6 @@ function loop(ts) {
     offCtx.fillStyle="rgba(0,0,0,0.2)"; offCtx.fillRect(0,0,W,H);
     if (G.mode==="wave")    drawWave();
     else if (G.mode==="xy") drawXY();
-  }
-
-  // trigger line (wave mode only)
-  if (G.mode==="wave") {
-    const ty = H/2 - G.trig*(H/2-8);
-    offCtx.strokeStyle="rgba(255,220,0,0.25)"; offCtx.lineWidth=1; offCtx.setLineDash([3,6]);
-    offCtx.beginPath(); offCtx.moveTo(0,ty); offCtx.lineTo(W,ty); offCtx.stroke();
-    offCtx.setLineDash([]);
   }
 
   ctx.fillStyle="#000"; ctx.fillRect(0,0,W,H);
@@ -551,6 +559,7 @@ async function drawConvert() {
   DRAW.saved = [0,1].map(i => ({ enabled:CH[i].enabled, axis:CH[i].axis, mute:AUDIO.chan[i].mute }));
   configureDrawChannel(0, aX, "x");
   configureDrawChannel(1, aY, "y");
+  if (!G.running) toggleRun();   // SUONA from a stopped scope resumes play so you see+hear it
   setMode("xy");
 }
 
@@ -721,6 +730,19 @@ function toggleRun() {
   if (AUDIO.ctx) { G.running ? AUDIO.ctx.resume() : AUDIO.ctx.suspend(); }
 }
 
+function toggleFullscreen() {
+  const el = document.getElementById("screen-wrap");
+  const on = el.classList.toggle("fs");
+  document.getElementById("btn-fs").textContent = on ? "✕" : "⛶";
+  // try the native API too (nice on Android/desktop; harmless where unsupported)
+  try {
+    if (on && el.requestFullscreen) el.requestFullscreen().catch(()=>{});
+    else if (!on && document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(()=>{});
+  } catch(e){}
+  // the canvas changed size → recompute the backing store next frame
+  requestAnimationFrame(initCanvas);
+}
+
 function clearScreen() {
   if (DRAW.active) DRAW.strokes = [];
   if (offCtx){offCtx.fillStyle="#000";offCtx.fillRect(0,0,W,H);}
@@ -732,9 +754,12 @@ window.addEventListener("load", ()=>{
   new ResizeObserver(initCanvas).observe(canvas);
 
   // sliders global
-  bindSlider("sl-time",  "v-time",  G, "timebase", v=>v.toFixed(1)+"×");
-  bindSlider("sl-noise", "v-noise", G, "noise",    v=>v.toFixed(2));
-  bindSlider("sl-trig",  "v-trig",  G, "trig",     v=>v.toFixed(2));
+  bindSlider("sl-noise", "v-noise", G, "noise", v=>v.toFixed(2));
+  // RUMORE drives a real white-noise voice in the audio, not just the visual grain
+  document.getElementById("sl-noise").addEventListener("input", e=>{
+    ensureAudio();
+    if (AUDIO.noiseGain) AUDIO.noiseGain.gain.setTargetAtTime(parseFloat(e.target.value)*NOISE_AUDIO, AUDIO.ctx.currentTime, 0.02);
+  });
   bindSlider("sl-dfreq", "v-dfreq", DRAW, "freq",  v=>v.toFixed(0)+"Hz");
 
   // drawing input
