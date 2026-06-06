@@ -51,7 +51,7 @@
     </p>
     <div class="slider-row">
       <div class="slider-meta"><span class="sl">FREQ LOOP</span><span class="sv" id="v-dfreq">220Hz</span></div>
-      <input type="range" id="sl-dfreq" min="40" max="1000" step="1" value="220">
+      <input type="range" id="sl-dfreq" min="20" max="1000" step="1" value="220">
     </div>
     <div class="seg">
       <button id="btn-draw-play" onclick="drawConvert()">SUONA</button>
@@ -61,11 +61,15 @@
 
   <!-- Generative mode -->
   <div class="ch-card" id="genera-card" style="display:none; background:var(--cyan)">
-    <span class="section-label">GENERA · LISSAJOUS</span>
+    <span class="section-label">GENERA</span>
+    <div class="seg" id="gen-type" style="margin-top:0">
+      <button class="active" data-t="lissajous" onclick="setGenType('lissajous')">LISSAJOUS</button>
+      <button data-t="spiro" onclick="setGenType('spiro')">SPIROGRAFO</button>
+    </div>
     <p style="font-size:8px; line-height:1.7; color:var(--ink)">
-      Due sinusoidi per asse generano la figura (e il suono stereo). Gioca con
-      le manopole: il RAPPORTO decide la forma, la FASE la ruota, l'ARMONICA la
-      arricchisce. Rapporti interi = figure ferme; vicini all'intero = ruotano.
+      Due segnali generano figura e suono stereo. Gioca con le manopole: il
+      RAPPORTO/GIRI decide la forma, la FASE la ruota, l'ARMONICA/RAGGIO la
+      arricchisce. Valori interi = figure ferme; vicini all'intero = ruotano.
     </p>
     <div class="row-grid">
       <div class="slider-row">
@@ -73,11 +77,11 @@
         <input type="range" id="sl-gbase" min="40" max="800" step="1" value="110">
       </div>
       <div class="slider-row">
-        <div class="slider-meta"><span class="sl">RAPPORTO X:Y</span><span class="sv" id="v-gratio">2.00</span></div>
+        <div class="slider-meta"><span class="sl" id="lbl-gratio">RAPPORTO X:Y</span><span class="sv" id="v-gratio">2.00</span></div>
         <input type="range" id="sl-gratio" min="0.5" max="5" step="0.01" value="2">
       </div>
       <div class="slider-row">
-        <div class="slider-meta"><span class="sl">ARMONICA</span><span class="sv" id="v-gharm">0.00</span></div>
+        <div class="slider-meta"><span class="sl" id="lbl-gharm">ARMONICA</span><span class="sv" id="v-gharm">0.00</span></div>
         <input type="range" id="sl-gharm" min="0" max="1" step="0.01" value="0">
       </div>
       <div class="slider-row">
