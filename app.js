@@ -648,7 +648,7 @@ function setMode(m) {
   });
   const label = { wave:"ONDA", xy:"X-Y", draw:"DISEGNA" }[m] || m.toUpperCase();
   document.getElementById("mode-label").textContent = label;
-  document.getElementById("screen-label").textContent = "● "+label;
+  document.getElementById("screen-label").textContent = label;
   // axis pickers only matter in X-Y; SU-GIU' (vertical offset) only in ONDA/DISEGNA
   [0,1].forEach(i => {
     document.getElementById("axis-row-ch"+i).style.display = m==="xy"?"block":"none";
@@ -809,7 +809,7 @@ function bindSlider(id, valId, obj, key, fmt) {
 function toggleRun() {
   G.running = !G.running;
   const btn = document.getElementById("btn-run");
-  btn.textContent = G.running?"■\u00a0\u00a0STOP":"▶\u00a0\u00a0RUN";
+  btn.textContent = G.running?"STOP":"RUN";
   btn.classList.toggle("stopped", !G.running);
   const led = document.getElementById("led-run");
   led.style.background = G.running?"#39ff14":"#333";
@@ -821,7 +821,7 @@ function toggleRun() {
 function toggleFullscreen() {
   const el = document.getElementById("screen-wrap");
   const on = el.classList.toggle("fs");
-  document.getElementById("btn-fs").textContent = on ? "✕" : "⛶";
+  document.getElementById("btn-fs").textContent = on ? "ESCI" : "TUTTO SCHERMO";
   // try the native API too (nice on Android/desktop; harmless where unsupported)
   try {
     if (on && el.requestFullscreen) el.requestFullscreen().catch(()=>{});
