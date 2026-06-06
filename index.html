@@ -1,9 +1,16 @@
 <!DOCTYPE html>
+<!--
+  Oscilloscopio della Gleba — analog oscilloscope simulator  ·  v0.1.0
+  Single-file HTML/JS, zero dependencies (except Google Fonts).
+  Inspired by osci-render (https://osci-render.com) by James H. Ball — GPLv3.
+  Visual style: Dr. Pira / Fumetti della Gleba (https://fumettidellagleba.org).
+  Licensed under GPLv3 — see LICENSE.
+-->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>DIDASCOPE</title>
+<title>Oscilloscopio della Gleba</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
 
@@ -56,7 +63,7 @@ body {
 }
 
 #title {
-  font-size: 13px;
+  font-size: 11px;
   color: var(--ink);
   line-height: 1.6;
   letter-spacing: 1px;
@@ -100,6 +107,7 @@ canvas {
   width: 100%;
   height: clamp(160px, 36vw, 300px);
   image-rendering: pixelated;
+  touch-action: none; /* allow drawing gestures without page scroll */
 }
 
 #screen-label {
@@ -361,7 +369,7 @@ input[type=range]::-webkit-slider-thumb {
 <body>
 
 <div id="header">
-  <div><span id="title">DIDASCOPO<br>DS-2M</span></div>
+  <div><span id="title">OSCILLOSCOPIO<br>DELLA GLEBA</span><span id="subtitle">DS-2M</span></div>
   <div id="leds">
     <div class="led-group"><div class="led" id="led-run"></div><span class="led-label">ON</span></div>
     <div class="led-group"><div class="led" id="led-ch1"></div><span class="led-label">CH1</span></div>
@@ -384,6 +392,24 @@ input[type=range]::-webkit-slider-thumb {
       <button id="tab-wave" class="active" onclick="setMode('wave')">ONDA</button>
       <button id="tab-dot"  onclick="setMode('dot')">PUNTINO</button>
       <button id="tab-xy"   onclick="setMode('xy')">X VS Y</button>
+      <button id="tab-draw" onclick="setMode('draw')">DISEGNA</button>
+    </div>
+  </div>
+
+  <!-- Draw mode -->
+  <div class="ch-card" id="draw-card" style="display:none; background:var(--cyan)">
+    <span class="section-label">DISEGNA E SUONA</span>
+    <p style="font-size:8px; line-height:1.7; color:var(--ink)">
+      Disegna una forma sullo schermo (dito o mouse). Premi SUONA per trasformarla
+      in suono stereo (X = sinistra, Y = destra) e vederla in modo X VS Y.
+    </p>
+    <div class="slider-row">
+      <div class="slider-meta"><span class="sl">FREQ LOOP</span><span class="sv" id="v-dfreq">55Hz</span></div>
+      <input type="range" id="sl-dfreq" min="20" max="200" step="1" value="55">
+    </div>
+    <div class="seg">
+      <button id="btn-draw-play" onclick="drawConvert()">SUONA ▶</button>
+      <button onclick="resetDraw()">PULISCI</button>
     </div>
   </div>
 
@@ -553,6 +579,61 @@ function findTrigger(buf, level, hyst=0.02) {
   return 0;
 }
 
+// ── Draw-mode geometry pipeline ──────────────────────────────────────────────
+const clamp1 = v => v < -1 ? -1 : v > 1 ? 1 : v;
+
+// nearest-neighbour traversal → continuous path
+function sortPoints(pts) {
+  if (pts.length < 2) return pts.slice();
+  const rest = pts.slice();
+  const path = [rest.shift()];
+  while (rest.length) {
+    const last = path[path.length-1];
+    let bi = 0, bd = Infinity;
+    for (let i=0; i<rest.length; i++) {
+      const dx = rest[i].x-last.x, dy = rest[i].y-last.y, d = dx*dx+dy*dy;
+      if (d < bd) { bd = d; bi = i; }
+    }
+    path.push(rest.splice(bi,1)[0]);
+  }
+  return path;
+}
+
+// equidistant resampling along a CLOSED path → M points (seamless loop)
+function resamplePath(pts, M) {
+  const p = pts.slice(); p.push(p[0]);          // close the loop
+  const seg = []; let total = 0;
+  for (let i=1; i<p.length; i++) {
+    const d = Math.hypot(p[i].x-p[i-1].x, p[i].y-p[i-1].y);
+    seg.push(d); total += d;
+  }
+  if (total === 0) return Array.from({length:M}, () => ({...p[0]}));
+  const out = []; let si = 0, acc = 0;
+  for (let i=0; i<M; i++) {
+    const target = (i/M)*total;
+    while (si < seg.length-1 && acc + seg[si] < target) { acc += seg[si]; si++; }
+    const t = seg[si] > 0 ? (target-acc)/seg[si] : 0;
+    const a = p[si], b = p[si+1];
+    out.push({ x:a.x+(b.x-a.x)*t, y:a.y+(b.y-a.y)*t });
+  }
+  return out;
+}
+
+// closed Catmull-Rom spline → N smoothed points
+function catmullRom(cp, N) {
+  const m = cp.length, out = new Array(N);
+  for (let i=0; i<N; i++) {
+    const u = (i/N)*m, seg = Math.floor(u), t = u-seg;
+    const p0 = cp[(seg-1+m)%m], p1 = cp[seg%m], p2 = cp[(seg+1)%m], p3 = cp[(seg+2)%m];
+    const t2 = t*t, t3 = t2*t;
+    out[i] = {
+      x: 0.5*((2*p1.x) + (-p0.x+p2.x)*t + (2*p0.x-5*p1.x+4*p2.x-p3.x)*t2 + (-p0.x+3*p1.x-3*p2.x+p3.x)*t3),
+      y: 0.5*((2*p1.y) + (-p0.y+p2.y)*t + (2*p0.y-5*p1.y+4*p2.y-p3.y)*t2 + (-p0.y+3*p1.y-3*p2.y+p3.y)*t3),
+    };
+  }
+  return out;
+}
+
 // ── State ──────────────────────────────────────────────────────────────────
 const G = { timebase:1, noise:0, trig:0, mode:"wave", running:true };
 
@@ -562,6 +643,16 @@ const CH = [
   { enabled:true, src:"synth", waveform:"sine", freq:3, amp:0.75, gain:2, yOff:0, color:"#00cfff", axis:"y",
     stream:null, actx:null, analyser:null, micBuf:null, micOk:false },
 ];
+
+// ── Draw mode state (image → audio → XY) ─────────────────────────────────────
+const DRAW = {
+  active:false,     // sketching on the screen right now
+  playing:false,    // a drawn shape is looping as audio
+  points:[],        // raw {x,y} in device pixels
+  freq:55,          // loop frequency (Hz) → buffer length = sampleRate / freq
+  actx:null, src:null, splitter:null, merger:null, gain:null,
+  analyserX:null, analyserY:null,
+};
 
 // ── Canvas ─────────────────────────────────────────────────────────────────
 const canvas = document.getElementById("scope");
@@ -609,6 +700,13 @@ function getMicBuf(ch) {
 
 // returns array of values -1..1 for wave mode
 function getWaveSamples(ch, n) {
+  if (ch.src==="draw") {
+    const buf = getMicBuf(ch);
+    if (!buf) return new Float32Array(n);
+    const out = new Float32Array(n);
+    for (let i=0; i<n; i++) out[i] = buf[Math.floor(i/n*buf.length)] || 0;
+    return out;
+  }
   if (ch.src==="mic") {
     const buf = getMicBuf(ch);
     if (!buf) return new Float32Array(n);
@@ -632,6 +730,10 @@ function getWaveSamples(ch, n) {
 
 // returns single current value for dot/XY
 function getCurrentSample(ch) {
+  if (ch.src==="draw") {
+    const buf = getMicBuf(ch);
+    return buf ? (buf[0]||0) : 0;
+  }
   if (ch.src==="mic") {
     const buf = getMicBuf(ch);
     if (!buf) return 0;
@@ -711,17 +813,36 @@ function drawXY() {
   strokePts(offCtx, pts, col, 8, 1.5);
 }
 
+function drawSketch() {
+  const pts = DRAW.points;
+  if (pts.length < 1) {
+    // crosshair hint on empty canvas
+    offCtx.strokeStyle="rgba(57,255,20,0.25)"; offCtx.lineWidth=1;
+    offCtx.beginPath(); offCtx.moveTo(W/2,H/2-12); offCtx.lineTo(W/2,H/2+12);
+    offCtx.moveTo(W/2-12,H/2); offCtx.lineTo(W/2+12,H/2); offCtx.stroke();
+    return;
+  }
+  const path = pts.map(p => [p.x, p.y]);
+  strokePts(offCtx, path, "#39ff1433", 0, 5);
+  strokePts(offCtx, path, "#39ff14", 8, 2);
+}
+
 // ── Render loop ────────────────────────────────────────────────────────────
 function loop(ts) {
   requestAnimationFrame(loop);
   if (!G.running||!offCtx) return;
   t0 = ts;
 
-  offCtx.fillStyle="rgba(0,0,0,0.2)"; offCtx.fillRect(0,0,W,H);
-
-  if (G.mode==="wave")      drawWave();
-  else if (G.mode==="dot")  drawDot();
-  else if (G.mode==="xy")   drawXY();
+  if (G.mode==="draw") {
+    // full clear each frame so the sketch persists without fading
+    offCtx.fillStyle="#000"; offCtx.fillRect(0,0,W,H);
+    drawSketch();
+  } else {
+    offCtx.fillStyle="rgba(0,0,0,0.2)"; offCtx.fillRect(0,0,W,H);
+    if (G.mode==="wave")      drawWave();
+    else if (G.mode==="dot")  drawDot();
+    else if (G.mode==="xy")   drawXY();
+  }
 
   // trigger line (wave mode only)
   if (G.mode==="wave") {
@@ -772,21 +893,115 @@ function stopMic(ch) {
   ch.stream=null; ch.actx=null; ch.analyser=null; ch.micBuf=null; ch.micOk=false;
 }
 
+// ── Draw → audio → XY ────────────────────────────────────────────────────────
+function startSketch() {
+  stopDrawAudio();
+  DRAW.points = [];
+  DRAW.active = true;
+  clearScreen();
+}
+
+function resetDraw() {
+  stopDrawAudio();
+  DRAW.points = [];
+  DRAW.active = true;
+  clearScreen();
+}
+
+// route a drawn-shape analyser into a channel so the XY renderer picks it up
+function configureDrawChannel(i, analyser, axis) {
+  const ch = CH[i];
+  if (ch.src==="mic") stopMic(ch);   // release any live mic stream/context first
+  ch.src = "draw";
+  ch.analyser = analyser;
+  ch.micBuf = new Float32Array(analyser.fftSize);
+  ch.axis = axis;
+  ch.enabled = true;
+  updateSrcUI(i, "draw");
+  setAxisUI(i, axis);
+  const btn = document.getElementById("toggle-ch"+i);
+  btn.textContent = "ON";
+  btn.style.background = ch.color; btn.style.color = "#000"; btn.style.borderColor = ch.color;
+  document.getElementById("card-ch"+i).style.opacity = "1";
+  updateLED(i);
+}
+
+function restoreChannelSynth(i) {
+  const ch = CH[i];
+  ch.src = "synth"; ch.analyser = null; ch.micBuf = null;
+  updateSrcUI(i, "synth");
+}
+
+function stopDrawAudio() {
+  if (DRAW.src) { try { DRAW.src.stop(); } catch(e){} }
+  if (DRAW.actx) { try { DRAW.actx.close(); } catch(e){} }
+  DRAW.actx = DRAW.src = DRAW.splitter = DRAW.merger = DRAW.gain = null;
+  DRAW.analyserX = DRAW.analyserY = null;
+  DRAW.playing = false;
+  [0,1].forEach(i => { if (CH[i].src==="draw") restoreChannelSynth(i); });
+}
+
+// the full pipeline: sketch → sorted path → resample → spline → stereo loop → XY
+function drawConvert() {
+  if (DRAW.points.length < 4) { alert("Disegna prima una forma!"); return; }
+  stopDrawAudio();
+
+  // normalise to -1..1 preserving aspect ratio (centre of screen = origin)
+  const s = 2/Math.max(W,H);
+  let P = DRAW.points.map(p => ({ x:(p.x-W/2)*s, y:-(p.y-H/2)*s }));
+  P = sortPoints(P);
+
+  const actx = new (window.AudioContext||window.webkitAudioContext)();
+  if (actx.state==="suspended") actx.resume();
+
+  const N = Math.max(64, Math.round(actx.sampleRate / DRAW.freq));
+  const M = Math.min(256, Math.max(8, P.length));
+  const smooth = catmullRom(resamplePath(P, M), N);
+
+  const buf = actx.createBuffer(2, N, actx.sampleRate);
+  const L = buf.getChannelData(0), R = buf.getChannelData(1);
+  for (let i=0; i<N; i++) { L[i] = clamp1(smooth[i].x); R[i] = clamp1(smooth[i].y); }
+
+  const src = actx.createBufferSource(); src.buffer = buf; src.loop = true;
+  const splitter = actx.createChannelSplitter(2);
+  const aX = actx.createAnalyser(); aX.fftSize = 4096; aX.smoothingTimeConstant = 0;
+  const aY = actx.createAnalyser(); aY.fftSize = 4096; aY.smoothingTimeConstant = 0;
+  src.connect(splitter);
+  splitter.connect(aX, 0);
+  splitter.connect(aY, 1);
+  // also play it (quietly) — it's oscilloscope music after all
+  const merger = actx.createChannelMerger(2);
+  splitter.connect(merger, 0, 0);
+  splitter.connect(merger, 1, 1);
+  const gain = actx.createGain(); gain.gain.value = 0.25;
+  merger.connect(gain).connect(actx.destination);
+  src.start();
+
+  Object.assign(DRAW, { actx, src, splitter, merger, gain, analyserX:aX, analyserY:aY, playing:true });
+  configureDrawChannel(0, aX, "x");
+  configureDrawChannel(1, aY, "y");
+  setMode("xy");
+}
+
 // ── Controls ───────────────────────────────────────────────────────────────
 function setMode(m) {
   G.mode = m;
-  ["wave","dot","xy"].forEach(id => {
+  if (m !== "draw") DRAW.active = false;
+  ["wave","dot","xy","draw"].forEach(id => {
     const btn = document.getElementById("tab-"+id);
     btn.className = m===id?"active":"";
     btn.style.color = m===id?"#39ff14":"#555";
     btn.style.boxShadow = m===id?"inset 0 -2px 0 #39ff14":"none";
   });
   document.getElementById("mode-label").textContent = m.toUpperCase();
-  // show/hide axis rows
+  document.getElementById("screen-label").textContent = "● "+m.toUpperCase();
+  // show/hide axis rows + draw card
   [0,1].forEach(i => {
     document.getElementById("axis-row-ch"+i).style.display = m==="xy"?"block":"none";
   });
-  clearScreen();
+  document.getElementById("draw-card").style.display = m==="draw"?"":"none";
+  if (m === "draw") startSketch();
+  else clearScreen();
 }
 
 function toggleCh(i) {
@@ -801,28 +1016,35 @@ function toggleCh(i) {
   updateLED(i);
 }
 
-async function setSrc(i, btn) {
+function updateSrcUI(i, val) {
   const ch = CH[i];
-  const val = btn.dataset.v;
-  if (val===ch.src) return;
-  if (val==="mic") {
-    const ok = await startMic(ch);
-    if (!ok) { alert("Mic access denied or unavailable"); return; }
-  } else {
-    stopMic(ch);
-  }
-  ch.src = val;
-  // update seg buttons
+  // seg buttons (no button matches "draw" → both inactive, signalling external src)
   document.querySelectorAll("#src-ch"+i+" button").forEach(b=>{
-    b.className = b.dataset.v===val?"active":"";
-    b.style.background = b.dataset.v===val?ch.color:"transparent";
-    b.style.color       = b.dataset.v===val?"#000":"#444";
-    b.style.borderColor = b.dataset.v===val?ch.color:"#2a2a2a";
+    const a = b.dataset.v===val;
+    b.className = a?"active":"";
+    b.style.background  = a?ch.color:"transparent";
+    b.style.color       = a?"#000":"#444";
+    b.style.borderColor = a?ch.color:"#2a2a2a";
   });
   document.getElementById("synth-ch"+i).style.display    = val==="synth"?"block":"none";
   document.getElementById("freq-row-ch"+i).style.display = val==="synth"?"flex":"none";
   document.getElementById("amp-row-ch"+i).style.display  = val==="synth"?"flex":"none";
   document.getElementById("gain-row-ch"+i).style.display = val==="mic"?"flex":"none";
+}
+
+async function setSrc(i, btn) {
+  const ch = CH[i];
+  const val = btn.dataset.v;
+  if (ch.src==="draw") stopDrawAudio();   // leaving a drawn shape → tear it down
+  if (val===ch.src) return;
+  if (val==="mic") {
+    const ok = await startMic(ch);
+    if (!ok) { alert("Microfono non disponibile o negato"); return; }
+  } else {
+    stopMic(ch);
+  }
+  ch.src = val;
+  updateSrcUI(i, val);
 }
 
 function setWave(i, btn) {
@@ -834,13 +1056,17 @@ function setWave(i, btn) {
   });
 }
 
-function setAxis(i, btn) {
-  CH[i].axis = btn.dataset.v;
-  btn.closest(".seg").querySelectorAll("button").forEach(b=>{
-    const a = b===btn;
+function setAxisUI(i, val) {
+  document.querySelectorAll("#axis-ch"+i+" button").forEach(b=>{
+    const a = b.dataset.v===val;
     b.className = a?"active":"";
     applySegStyle(b, a, CH[i].color);
   });
+}
+
+function setAxis(i, btn) {
+  CH[i].axis = btn.dataset.v;
+  setAxisUI(i, CH[i].axis);
 }
 
 function applySegStyle(btn, active, color) {
@@ -905,6 +1131,7 @@ function toggleRun() {
 }
 
 function clearScreen() {
+  if (DRAW.active) DRAW.points = [];
   if (offCtx){offCtx.fillStyle="#000";offCtx.fillRect(0,0,W,H);}
 }
 
@@ -917,6 +1144,27 @@ window.addEventListener("load", ()=>{
   bindSlider("sl-time",  "v-time",  G, "timebase", v=>v.toFixed(1)+"×");
   bindSlider("sl-noise", "v-noise", G, "noise",    v=>v.toFixed(2));
   bindSlider("sl-trig",  "v-trig",  G, "trig",     v=>v.toFixed(2));
+  bindSlider("sl-dfreq", "v-dfreq", DRAW, "freq",  v=>v.toFixed(0)+"Hz");
+
+  // drawing input
+  let sketching = false;
+  const sketchPoint = e => {
+    if (G.mode!=="draw" || !DRAW.active) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX-rect.left)/rect.width*W;
+    const y = (e.clientY-rect.top)/rect.height*H;
+    const last = DRAW.points[DRAW.points.length-1];
+    if (!last || Math.hypot(x-last.x, y-last.y) > Math.max(2, W*0.004)) DRAW.points.push({x,y});
+  };
+  canvas.addEventListener("pointerdown", e=>{
+    if (G.mode!=="draw") return;
+    sketching = true; DRAW.points = [];
+    canvas.setPointerCapture?.(e.pointerId);
+    sketchPoint(e); e.preventDefault();
+  });
+  canvas.addEventListener("pointermove", e=>{ if (sketching){ sketchPoint(e); e.preventDefault(); } });
+  canvas.addEventListener("pointerup",   ()=>{ sketching = false; });
+  canvas.addEventListener("pointercancel", ()=>{ sketching = false; });
 
   // sliders per channel
   [0,1].forEach(i=>{
