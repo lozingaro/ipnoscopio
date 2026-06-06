@@ -911,6 +911,7 @@ function resetDraw() {
 // route a drawn-shape analyser into a channel so the XY renderer picks it up
 function configureDrawChannel(i, analyser, axis) {
   const ch = CH[i];
+  if (ch.src==="mic") stopMic(ch);   // release any live mic stream/context first
   ch.src = "draw";
   ch.analyser = analyser;
   ch.micBuf = new Float32Array(analyser.fftSize);
