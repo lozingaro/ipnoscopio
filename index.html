@@ -94,18 +94,18 @@
     <div>
       <span class="sl" style="font-size:9px;letter-spacing:1px;color:#444">SORGENTE</span>
       <div class="seg" style="margin-top:4px" id="src-ch0">
-        <button class="active" data-v="synth" onclick="setSrc(0,this)">SINTET.</button>
-        <button data-v="mic" onclick="setSrc(0,this)">MICRO 🎤</button>
+        <button class="active" data-v="synth" onclick="setSrc(0,this)">SINTETIZZATORE</button>
+        <button data-v="mic" onclick="setSrc(0,this)">MICROFONO 🎤</button>
       </div>
     </div>
 
     <div id="synth-ch0">
       <span class="sl" style="font-size:9px;letter-spacing:1px;color:#444">FORMA D'ONDA</span>
       <div class="seg" style="margin-top:4px">
-        <button class="active" data-w="sine"     onclick="setWave(0,this)">SIN</button>
-        <button data-w="square"   onclick="setWave(0,this)">QUA</button>
-        <button data-w="sawtooth" onclick="setWave(0,this)">DEN</button>
-        <button data-w="triangle" onclick="setWave(0,this)">TRI</button>
+        <button class="active" data-w="sine"     onclick="setWave(0,this)">SENO</button>
+        <button data-w="square"   onclick="setWave(0,this)">QUADRA</button>
+        <button data-w="sawtooth" onclick="setWave(0,this)">DENTE</button>
+        <button data-w="triangle" onclick="setWave(0,this)">TRIANGOLO</button>
       </div>
     </div>
 
@@ -122,7 +122,7 @@
         <div class="slider-meta"><span class="sl">GUADAGNO</span><span class="sv" id="v-gain-ch0">×2.0</span></div>
         <input type="range" id="sl-gain-ch0" min="0.1" max="10" step="0.1" value="2">
       </div>
-      <div class="slider-row">
+      <div class="slider-row" id="yoff-row-ch0">
         <div class="slider-meta"><span class="sl">SU-GIU'</span><span class="sv" id="v-yoff-ch0">0.0</span></div>
         <input type="range" id="sl-yoff-ch0" min="-2" max="2" step="0.1" value="0">
       </div>
@@ -153,18 +153,18 @@
     <div>
       <span class="sl" style="font-size:9px;letter-spacing:1px;color:#444">SORGENTE</span>
       <div class="seg" style="margin-top:4px" id="src-ch1">
-        <button class="active" data-v="synth" onclick="setSrc(1,this)">SINTET.</button>
-        <button data-v="mic" onclick="setSrc(1,this)">MICRO 🎤</button>
+        <button class="active" data-v="synth" onclick="setSrc(1,this)">SINTETIZZATORE</button>
+        <button data-v="mic" onclick="setSrc(1,this)">MICROFONO 🎤</button>
       </div>
     </div>
 
     <div id="synth-ch1">
       <span class="sl" style="font-size:9px;letter-spacing:1px;color:#444">FORMA D'ONDA</span>
       <div class="seg" style="margin-top:4px">
-        <button class="active" data-w="sine"     onclick="setWave(1,this)">SIN</button>
-        <button data-w="square"   onclick="setWave(1,this)">QUA</button>
-        <button data-w="sawtooth" onclick="setWave(1,this)">DEN</button>
-        <button data-w="triangle" onclick="setWave(1,this)">TRI</button>
+        <button class="active" data-w="sine"     onclick="setWave(1,this)">SENO</button>
+        <button data-w="square"   onclick="setWave(1,this)">QUADRA</button>
+        <button data-w="sawtooth" onclick="setWave(1,this)">DENTE</button>
+        <button data-w="triangle" onclick="setWave(1,this)">TRIANGOLO</button>
       </div>
     </div>
 
@@ -181,7 +181,7 @@
         <div class="slider-meta"><span class="sl">GUADAGNO</span><span class="sv" id="v-gain-ch1">×2.0</span></div>
         <input type="range" id="sl-gain-ch1" min="0.1" max="10" step="0.1" value="2">
       </div>
-      <div class="slider-row">
+      <div class="slider-row" id="yoff-row-ch1">
         <div class="slider-meta"><span class="sl">SU-GIU'</span><span class="sv" id="v-yoff-ch1">0.0</span></div>
         <input type="range" id="sl-yoff-ch1" min="-2" max="2" step="0.1" value="0">
       </div>
