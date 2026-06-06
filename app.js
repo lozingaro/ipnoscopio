@@ -493,78 +493,125 @@ async function populateInputDevices() {
   } catch(e) { console.warn(e); }
 }
 
-// ── Generative engine (Lissajous + harmonics) ────────────────────────────────
-// Two sine oscillators per axis (fundamental + 3rd harmonic), summed; a DelayNode
-// on Y sets the X↔Y phase (rotates/opens the figure). Output is true stereo
-// (L = X, R = Y). A few knobs → a huge space of hypnotic figures.
+// ── Generative engine ────────────────────────────────────────────────────────
+// Two flavours, both producing a stable X-Y figure + stereo audio (L=X, R=Y):
+//  • LISSAJOUS: 2 sines per axis (fundamental + 3rd harmonic), DelayNode on Y = phase
+//  • SPIROGRAFO: epicycle = outer circle (R) + inner circle (r) at k× speed; DelayNodes
+//    make the cos/sin pairs and set the inner phase. Knobs: FREQUENZA · RAPPORTO/GIRI ·
+//    ARMONICA/RAGGIO · FASE. Everything glides (no clicks).
 const GEN = {
-  on:false,
-  base:110, ratio:2, harm:0, phase:0.25,    // FREQUENZA · RAPPORTO · ARMONICA · FASE
-  master:null, delayY:null,
-  oscX1:null, oscX2:null, oscY1:null, oscY2:null, gHarmX:null, gHarmY:null,
+  on:false, type:"lissajous",
+  base:110, ratio:2, harm:0, phase:0.25,
+  master:null, busX:null, busY:null,
+  oscs:[], disc:[],
   analyser:[null,null], buf:[null,null],
+  // lissajous refs
+  delayY:null, oscX1:null, oscX2:null, oscY1:null, oscY2:null, gHarmX:null, gHarmY:null,
+  // spiro refs
+  oscO:null, oscI:null, dOY:null, dIX:null, dIY:null, gIX:null, gIY:null,
 };
-const GEN_HARM = 3;          // which harmonic the ARMONICA knob adds
+const GEN_HARM = 3;          // which harmonic the ARMONICA knob adds (lissajous)
 const GEN_FUND = 0.6;        // fundamental level (leaves headroom for the harmonic)
 const GEN_HMAX = 0.4;        // max harmonic level → fundamental+harmonic ≤ 1
+const SPIRO_R  = 0.55;       // outer circle radius
+const SPIRO_RMAX = 0.45;     // max inner radius → R + r ≤ 1
 
-function startGen() {
-  if (GEN.on) return;
-  const ctx = ensureAudio();
-  if (ctx.state==="suspended") ctx.resume();
+function buildLissajous(ctx, busX, busY) {
   const fX = GEN.base, fY = GEN.base*GEN.ratio;
-
-  const busX = ctx.createGain(), busY = ctx.createGain();
-
   GEN.oscX1 = ctx.createOscillator(); GEN.oscX1.type="sine"; GEN.oscX1.frequency.value=fX;
   const gX1 = ctx.createGain(); gX1.gain.value=GEN_FUND; GEN.oscX1.connect(gX1).connect(busX);
   GEN.oscX2 = ctx.createOscillator(); GEN.oscX2.type="sine"; GEN.oscX2.frequency.value=fX*GEN_HARM;
   GEN.gHarmX = ctx.createGain(); GEN.gHarmX.gain.value=GEN.harm*GEN_HMAX; GEN.oscX2.connect(GEN.gHarmX).connect(busX);
 
+  const preY = ctx.createGain();
   GEN.oscY1 = ctx.createOscillator(); GEN.oscY1.type="sine"; GEN.oscY1.frequency.value=fY;
-  const gY1 = ctx.createGain(); gY1.gain.value=GEN_FUND; GEN.oscY1.connect(gY1).connect(busY);
+  const gY1 = ctx.createGain(); gY1.gain.value=GEN_FUND; GEN.oscY1.connect(gY1).connect(preY);
   GEN.oscY2 = ctx.createOscillator(); GEN.oscY2.type="sine"; GEN.oscY2.frequency.value=fY*GEN_HARM;
-  GEN.gHarmY = ctx.createGain(); GEN.gHarmY.gain.value=GEN.harm*GEN_HMAX; GEN.oscY2.connect(GEN.gHarmY).connect(busY);
-
-  // FASE: delay Y by a fraction of its period (rotates the Lissajous)
+  GEN.gHarmY = ctx.createGain(); GEN.gHarmY.gain.value=GEN.harm*GEN_HMAX; GEN.oscY2.connect(GEN.gHarmY).connect(preY);
   GEN.delayY = ctx.createDelay(1); GEN.delayY.delayTime.value = GEN.phase/Math.max(1,fY);
-  busY.connect(GEN.delayY);
+  preY.connect(GEN.delayY).connect(busY);
 
-  // scope taps
+  GEN.oscs.push(GEN.oscX1,GEN.oscX2,GEN.oscY1,GEN.oscY2);
+  GEN.disc.push(gX1,GEN.gHarmX,gY1,GEN.gHarmY,preY,GEN.delayY);
+}
+
+function buildSpiro(ctx, busX, busY) {
+  const f = GEN.base, k = GEN.ratio, r = GEN.harm*SPIRO_RMAX, ph = GEN.phase;
+  // outer circle: one osc → X direct, → Y via 90° delay
+  GEN.oscO = ctx.createOscillator(); GEN.oscO.type="sine"; GEN.oscO.frequency.value=f;
+  const gOX = ctx.createGain(); gOX.gain.value=SPIRO_R; GEN.oscO.connect(gOX).connect(busX);
+  GEN.dOY = ctx.createDelay(1); GEN.dOY.delayTime.value=0.25/Math.max(1,f);
+  const gOY = ctx.createGain(); gOY.gain.value=SPIRO_R; GEN.oscO.connect(GEN.dOY); GEN.dOY.connect(gOY).connect(busY);
+  // inner circle at k× speed: phase ph on X, ph+90° on Y
+  GEN.oscI = ctx.createOscillator(); GEN.oscI.type="sine"; GEN.oscI.frequency.value=f*k;
+  GEN.dIX = ctx.createDelay(1); GEN.dIX.delayTime.value=ph/Math.max(1,f*k);
+  GEN.gIX = ctx.createGain(); GEN.gIX.gain.value=r; GEN.oscI.connect(GEN.dIX); GEN.dIX.connect(GEN.gIX).connect(busX);
+  GEN.dIY = ctx.createDelay(1); GEN.dIY.delayTime.value=(ph+0.25)/Math.max(1,f*k);
+  GEN.gIY = ctx.createGain(); GEN.gIY.gain.value=r; GEN.oscI.connect(GEN.dIY); GEN.dIY.connect(GEN.gIY).connect(busY);
+
+  GEN.oscs.push(GEN.oscO,GEN.oscI);
+  GEN.disc.push(gOX,GEN.dOY,gOY,GEN.dIX,GEN.gIX,GEN.dIY,GEN.gIY);
+}
+
+function startGen() {
+  if (GEN.on) return;
+  const ctx = ensureAudio();
+  if (ctx.state==="suspended") ctx.resume();
+  GEN.oscs = []; GEN.disc = [];
+  const busX = ctx.createGain(), busY = ctx.createGain();
+  GEN.busX = busX; GEN.busY = busY;
+
   const aX = ctx.createAnalyser(); aX.fftSize=2048; aX.smoothingTimeConstant=0;
   const aY = ctx.createAnalyser(); aY.fftSize=2048; aY.smoothingTimeConstant=0;
-  busX.connect(aX); GEN.delayY.connect(aY);
+  busX.connect(aX); busY.connect(aY);
   GEN.analyser=[aX,aY]; GEN.buf=[new Float32Array(2048), new Float32Array(2048)];
 
-  // stereo audio out (L=X, R=Y) → master mixer
   GEN.master = ctx.createGain(); GEN.master.gain.value=0.5;
   const merger = ctx.createChannelMerger(2);
-  busX.connect(merger,0,0); GEN.delayY.connect(merger,0,1);
+  busX.connect(merger,0,0); busY.connect(merger,0,1);
   merger.connect(GEN.master); GEN.master.connect(AUDIO.master);
+  GEN.disc.push(busX,busY,aX,aY,merger);
 
-  [GEN.oscX1,GEN.oscX2,GEN.oscY1,GEN.oscY2].forEach(o=>o.start());
+  if (GEN.type==="spiro") buildSpiro(ctx, busX, busY); else buildLissajous(ctx, busX, busY);
+  GEN.oscs.forEach(o=>o.start());
   GEN.on = true;
 }
 
 function updateGen() {
   if (!GEN.on || !AUDIO.ctx) return;
-  const t = AUDIO.ctx.currentTime;
-  const fX = GEN.base, fY = GEN.base*GEN.ratio;
-  GEN.oscX1.frequency.setTargetAtTime(fX, t, 0.02);
-  GEN.oscX2.frequency.setTargetAtTime(fX*GEN_HARM, t, 0.02);
-  GEN.oscY1.frequency.setTargetAtTime(fY, t, 0.02);
-  GEN.oscY2.frequency.setTargetAtTime(fY*GEN_HARM, t, 0.02);
-  GEN.gHarmX.gain.setTargetAtTime(GEN.harm*GEN_HMAX, t, 0.02);
-  GEN.gHarmY.gain.setTargetAtTime(GEN.harm*GEN_HMAX, t, 0.02);
-  GEN.delayY.delayTime.setTargetAtTime(GEN.phase/Math.max(1,fY), t, 0.02);
+  const t = AUDIO.ctx.currentTime, ramp = (p,v)=>p.setTargetAtTime(v,t,0.02);
+  if (GEN.type==="spiro") {
+    const f = GEN.base, k = GEN.ratio, r = GEN.harm*SPIRO_RMAX, ph = GEN.phase;
+    ramp(GEN.oscO.frequency, f); ramp(GEN.oscI.frequency, f*k);
+    ramp(GEN.dOY.delayTime, 0.25/Math.max(1,f));
+    ramp(GEN.dIX.delayTime, ph/Math.max(1,f*k));
+    ramp(GEN.dIY.delayTime, (ph+0.25)/Math.max(1,f*k));
+    ramp(GEN.gIX.gain, r); ramp(GEN.gIY.gain, r);
+  } else {
+    const fX = GEN.base, fY = GEN.base*GEN.ratio;
+    ramp(GEN.oscX1.frequency, fX); ramp(GEN.oscX2.frequency, fX*GEN_HARM);
+    ramp(GEN.oscY1.frequency, fY); ramp(GEN.oscY2.frequency, fY*GEN_HARM);
+    ramp(GEN.gHarmX.gain, GEN.harm*GEN_HMAX); ramp(GEN.gHarmY.gain, GEN.harm*GEN_HMAX);
+    ramp(GEN.delayY.delayTime, GEN.phase/Math.max(1,fY));
+  }
 }
 
 function stopGen() {
   if (!GEN.on) return;
-  [GEN.oscX1,GEN.oscX2,GEN.oscY1,GEN.oscY2].forEach(o=>{ try{o.stop();}catch(e){} try{o.disconnect();}catch(e){} });
-  try { GEN.delayY.disconnect(); } catch(e){}
+  GEN.oscs.forEach(o=>{ try{o.stop();}catch(e){} try{o.disconnect();}catch(e){} });
+  GEN.disc.forEach(nd=>{ try{nd.disconnect();}catch(e){} });
   try { GEN.master.disconnect(); } catch(e){}
   GEN.on = false;
+}
+
+// switch generative flavour: relabel the two context knobs and rebuild if running
+function setGenType(type) {
+  if (GEN.type===type) return;
+  GEN.type = type;
+  document.querySelectorAll("#gen-type button").forEach(b=>b.classList.toggle("active", b.dataset.t===type));
+  document.getElementById("lbl-gratio").textContent = type==="spiro" ? "GIRI INTERNI" : "RAPPORTO X:Y";
+  document.getElementById("lbl-gharm").textContent  = type==="spiro" ? "RAGGIO INT."  : "ARMONICA";
+  if (GEN.on) { stopGen(); startGen(); }
 }
 
 // ── Draw → audio → XY ────────────────────────────────────────────────────────
@@ -656,7 +703,9 @@ async function drawConvert() {
 
   const N = Math.max(64, Math.round(actx.sampleRate / DRAW.freq));
   DRAW.N = N;
-  const M = Math.min(256, Math.max(8, P.length));
+  // control points: keep more detail (and never more than one per output sample).
+  // Lower FREQ LOOP → larger N → higher fidelity for complex shapes.
+  const M = Math.min(1024, N, Math.max(8, P.length));
   const smooth = catmullRom(resamplePath(P, M), N);
 
   const buf = actx.createBuffer(2, N, actx.sampleRate);
@@ -934,7 +983,7 @@ window.addEventListener("load", ()=>{
     const x = (e.clientX-rect.left)/rect.width*W;
     const y = (e.clientY-rect.top)/rect.height*H;
     const last = stroke[stroke.length-1];
-    if (!last || Math.hypot(x-last.x, y-last.y) > Math.max(2, W*0.004)) stroke.push({x,y});
+    if (!last || Math.hypot(x-last.x, y-last.y) > Math.max(1.5, W*0.002)) stroke.push({x,y});
   };
   canvas.addEventListener("pointerdown", e=>{
     if (G.mode!=="draw") return;
