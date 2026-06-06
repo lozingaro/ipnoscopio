@@ -1,6 +1,6 @@
 # Oscilloscopio della Gleba
 
-Analog oscilloscope simulator — single-file HTML/JS, zero dependencies.
+Analog oscilloscope simulator — plain HTML/CSS/JS (`index.html` + `styles.css` + `app.js`), no build step, zero dependencies.
 
 **Live:** <https://lozingaro.github.io/oscilloscope>
 
