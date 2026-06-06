@@ -243,27 +243,9 @@ function drawXY() {
     W/2 + samplesX[i]*marginX,
     H/2 - samplesY[i]*marginY,
   ]);
-
-  if (xCh && yCh) {
-    // two channels → a spatial gradient from CANALE 1 (X) colour to CANALE 2 (Y)
-    // colour, so both colours are visible and either one affects the trace
-    const grad = offCtx.createLinearGradient(0, 0, W, H);
-    grad.addColorStop(0, xCh.color);
-    grad.addColorStop(1, yCh.color);
-    const glow = blendHex(xCh.color, yCh.color);
-    const trace = lw => {
-      offCtx.beginPath();
-      pts.forEach(([x,y],i)=> i?offCtx.lineTo(x,y):offCtx.moveTo(x,y));
-      offCtx.lineWidth = lw; offCtx.stroke();
-    };
-    offCtx.shadowBlur = 0;  offCtx.strokeStyle = glow+"33"; trace(4);          // soft underlay
-    offCtx.shadowBlur = 8;  offCtx.shadowColor = glow; offCtx.strokeStyle = grad; trace(1.5);
-    offCtx.shadowBlur = 0;
-  } else {
-    const col = xCh ? xCh.color : yCh.color;
-    strokePts(offCtx, pts, col+"33", 0, 4);
-    strokePts(offCtx, pts, col, 8, 1.5);
-  }
+  const colA = xCh ? xCh.color : yCh.color;
+  const colB = yCh ? yCh.color : xCh.color;
+  paintXY(pts, colA, colB);
 }
 
 // generative engine → X-Y figure (its own analysers, channel colours)
@@ -277,17 +259,51 @@ function drawGen() {
     const idx = Math.floor(i/n*Ln);
     return [W/2 + (bx[idx]||0)*marginX, H/2 - (by[idx]||0)*marginY];
   });
+  paintXY(pts, CH[0].color, CH[1].color);
+}
+
+// ── MODULA: movement & rhythm applied to any X-Y figure ──────────────────────
+const MOD = { rot:0, pulse:0, doppio:0, tragitto:0 };
+
+// pulse envelope (1 at each beat → decays). pulse=0 → steady (1).
+function pulseHit() {
+  if (MOD.pulse<=0) return 1;
+  const phase = ((t0/1000)*MOD.pulse) % 1;
+  const d = 1-phase;
+  return d*d;                          // sharp-ish percussive decay
+}
+
+// transform + stroke the figure with rotation / scale(pulse) / translation /
+// optional doubled copy, in the channel-colour gradient
+function paintXY(pts, colA, colB) {
+  const cx=W/2, cy=H/2, tsec=t0/1000;
+  const th = MOD.rot*tsec*Math.PI*2, cosT=Math.cos(th), sinT=Math.sin(th);
+  const sc = 0.30 + 0.70*pulseHit();          // PULSO scales the figure visually
+  const dx = MOD.tragitto*W*0.18*Math.sin(tsec*0.70);
+  const dy = MOD.tragitto*H*0.18*Math.sin(tsec*0.93);
   const grad = offCtx.createLinearGradient(0,0,W,H);
-  grad.addColorStop(0, CH[0].color); grad.addColorStop(1, CH[1].color);
-  const glow = blendHex(CH[0].color, CH[1].color);
-  const trace = lw => {
-    offCtx.beginPath();
-    pts.forEach(([x,y],i)=> i?offCtx.lineTo(x,y):offCtx.moveTo(x,y));
-    offCtx.lineWidth = lw; offCtx.stroke();
+  grad.addColorStop(0, colA); grad.addColorStop(1, colB);
+  const glow = blendHex(colA, colB);
+  const drawCopy = (ox,oy,scale,alpha) => {
+    const tf = ([x,y]) => {
+      const X=(x-cx)*scale, Y=(y-cy)*scale;
+      return [cx + X*cosT - Y*sinT + dx + ox, cy + X*sinT + Y*cosT + dy + oy];
+    };
+    const path = lw => {
+      offCtx.beginPath();
+      pts.forEach((p,i)=>{ const [px,py]=tf(p); i?offCtx.lineTo(px,py):offCtx.moveTo(px,py); });
+      offCtx.lineWidth=lw; offCtx.stroke();
+    };
+    offCtx.globalAlpha=alpha;
+    offCtx.shadowBlur=0; offCtx.strokeStyle=glow+"33"; path(4);
+    offCtx.shadowBlur=8; offCtx.shadowColor=glow; offCtx.strokeStyle=grad; path(1.5);
+    offCtx.globalAlpha=1; offCtx.shadowBlur=0;
   };
-  offCtx.shadowBlur = 0; offCtx.strokeStyle = glow+"33"; trace(4);
-  offCtx.shadowBlur = 8; offCtx.shadowColor = glow; offCtx.strokeStyle = grad; trace(1.5);
-  offCtx.shadowBlur = 0;
+  drawCopy(0, 0, sc, 1);
+  if (MOD.doppio>0) {
+    const off = MOD.doppio*W*0.16;
+    drawCopy(off, -off*0.6, sc*(1-0.25*MOD.doppio), 0.55);
+  }
 }
 
 // ── Render loop ────────────────────────────────────────────────────────────
@@ -299,6 +315,12 @@ function loop(ts) {
   offCtx.fillStyle="rgba(0,0,0,0.2)"; offCtx.fillRect(0,0,W,H);
   if (G.mode==="wave")    drawWave();
   else if (G.mode==="xy") { if (GEN.on) drawGen(); else drawXY(); }
+
+  // PULSO drives the engine's master amplitude too → the rhythm is audible
+  if (GEN.on && GEN.master) {
+    const g = MOD.pulse>0 ? 0.5*(0.15+0.85*pulseHit()) : 0.5;
+    GEN.master.gain.setTargetAtTime(g, AUDIO.ctx.currentTime, 0.008);
+  }
 
   ctx.fillStyle="#000"; ctx.fillRect(0,0,W,H);
   ctx.drawImage(off,0,0);
@@ -770,6 +792,12 @@ window.addEventListener("load", ()=>{
   bindSlider("sl-gphase", "v-gphase", GEN, "phase", v=>v.toFixed(2));
   ["sl-gbase","sl-gratio","sl-gharm","sl-gphase"].forEach(id =>
     document.getElementById(id).addEventListener("input", updateGen));
+
+  // MODULA: movement & rhythm
+  bindSlider("sl-mrot",   "v-mrot",   MOD, "rot",      v=>v.toFixed(2));
+  bindSlider("sl-mpulse", "v-mpulse", MOD, "pulse",    v=>v.toFixed(1));
+  bindSlider("sl-mdop",   "v-mdop",   MOD, "doppio",   v=>v.toFixed(2));
+  bindSlider("sl-mtrag",  "v-mtrag",  MOD, "tragitto", v=>v.toFixed(2));
 
   // line-input device picker: switch interface and re-point the active channels
   document.getElementById("input-device").addEventListener("change", async e=>{
