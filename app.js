@@ -117,7 +117,6 @@ const DRAW = {
 const AUDIO = {
   ctx:null, master:null,
   masterVol:0.7, masterMute:false,
-  meter:null, meterBuf:null,        // analyser on the master bus → on-screen VU
   chan:[
     { vol:0.6, mute:true, gain:null, osc:null },   // muted by default → silent start
     { vol:0.6, mute:true, gain:null, osc:null },
@@ -135,10 +134,6 @@ function ensureAudio() {
   AUDIO.master = ctx.createGain();
   AUDIO.master.gain.value = AUDIO.masterMute ? 0 : AUDIO.masterVol;
   AUDIO.master.connect(ctx.destination);
-  // tap the master bus to drive an on-screen VU meter (diagnostic + nice to have)
-  AUDIO.meter = ctx.createAnalyser(); AUDIO.meter.fftSize = 1024;
-  AUDIO.meterBuf = new Float32Array(AUDIO.meter.fftSize);
-  AUDIO.master.connect(AUDIO.meter);
   AUDIO.chan.forEach((c,i) => {
     c.gain = ctx.createGain();
     c.gain.gain.value = 0;            // applyChan sets the real value below
@@ -216,21 +211,6 @@ function audioTest() {
     osc.start(t); osc.stop(t+0.52);
   };
   if (ctx.state==="suspended") ctx.resume().then(go); else go();
-}
-
-// refresh the master VU bar + AudioContext state readout each frame
-function updateAudioUI() {
-  const stEl = document.getElementById("audio-state");
-  if (stEl) stEl.textContent = AUDIO.ctx ? AUDIO.ctx.state : "off";
-  const vu = document.getElementById("vu-master");
-  if (!vu) return;
-  let rms = 0;
-  if (AUDIO.meter && AUDIO.ctx && AUDIO.ctx.state==="running") {
-    AUDIO.meter.getFloatTimeDomainData(AUDIO.meterBuf);
-    let s = 0; for (let i=0;i<AUDIO.meterBuf.length;i++) s += AUDIO.meterBuf[i]*AUDIO.meterBuf[i];
-    rms = Math.sqrt(s/AUDIO.meterBuf.length);
-  }
-  vu.style.width = Math.min(100, rms*140).toFixed(0) + "%";
 }
 
 // ── Canvas ─────────────────────────────────────────────────────────────────
@@ -421,8 +401,6 @@ function loop(ts) {
   const vg=ctx.createRadialGradient(W/2,H/2,H*.2,W/2,H/2,H*.8);
   vg.addColorStop(0,"transparent"); vg.addColorStop(1,"rgba(0,0,0,0.55)");
   ctx.fillStyle=vg; ctx.fillRect(0,0,W,H);
-
-  updateAudioUI();
 }
 
 // ── Mic ────────────────────────────────────────────────────────────────────
