@@ -223,8 +223,9 @@ function getMicBuf(ch) {
   return ch.micBuf;
 }
 
-// returns array of values -1..1 for wave mode
-function getWaveSamples(ch, n) {
+// returns array of values -1..1 for wave mode.
+// freqOverride (optional) replaces the synth visual frequency (used by COMBINA).
+function getWaveSamples(ch, n, freqOverride) {
   if (ch.src==="draw") {
     const buf = getMicBuf(ch);
     if (!buf) return new Float32Array(n);
@@ -249,9 +250,10 @@ function getWaveSamples(ch, n) {
     return out;
   } else {
     const out = new Float32Array(n);
+    const f = freqOverride || ch.freq;
     for (let i=0;i<n;i++) {
-      const t = (i/n)*G.timebase + t0*ch.freq*0.0001;
-      out[i] = synthSample(ch, t);
+      const t = (i/n)*G.timebase + t0*f*0.0001;
+      out[i] = WF[ch.waveform](t*f)*ch.amp;
     }
     return out;
   }
@@ -288,7 +290,16 @@ function drawXY() {
 
   const n = Math.min(W*2, 1440);
   const samplesX = xCh ? getWaveSamples(xCh, n) : new Float32Array(n);
-  const samplesY = yCh ? getWaveSamples(yCh, n) : new Float32Array(n);
+  // COMBINA · SORGENTI: RAPPORTO locks the Y synth frequency to X×ratio (stable
+  // Lissajous from two synths); for mic/line it's ignored.
+  const yFreq = (xCh && yCh && yCh.src==="synth" && xCh.src==="synth") ? xCh.freq*GEN.ratio : null;
+  let samplesY = yCh ? getWaveSamples(yCh, n, yFreq) : new Float32Array(n);
+  // FASE: rotate Y by a fraction of the window → rotates the figure (works for any
+  // source, synth or input)
+  if (GEN.phase) {
+    const k = Math.floor(((GEN.phase%1)+1)%1 * n);
+    if (k) { const r = new Float32Array(n); for (let i=0;i<n;i++) r[i]=samplesY[(i+k)%n]; samplesY = r; }
+  }
   const marginX  = W/2-8;
   const marginY  = H/2-8;
 
@@ -374,9 +385,8 @@ function loop(ts) {
     drawSketch();
   } else {
     offCtx.fillStyle="rgba(0,0,0,0.2)"; offCtx.fillRect(0,0,W,H);
-    if (G.mode==="wave")        drawWave();
-    else if (G.mode==="xy")     drawXY();
-    else if (G.mode==="genera") drawGen();
+    if (G.mode==="wave")    drawWave();
+    else if (G.mode==="xy") { if (GEN.on) drawGen(); else drawXY(); }
   }
 
   ctx.fillStyle="#000"; ctx.fillRect(0,0,W,H);
@@ -500,7 +510,7 @@ async function populateInputDevices() {
 //    make the cos/sin pairs and set the inner phase. Knobs: FREQUENZA · RAPPORTO/GIRI ·
 //    ARMONICA/RAGGIO · FASE. Everything glides (no clicks).
 const GEN = {
-  on:false, type:"lissajous",
+  on:false, type:"sorgenti",
   base:110, ratio:2, harm:0, phase:0.25,
   master:null, busX:null, busY:null,
   oscs:[], disc:[],
@@ -604,14 +614,20 @@ function stopGen() {
   GEN.on = false;
 }
 
-// switch generative flavour: relabel the two context knobs and rebuild if running
+// switch the X-Y combination flavour: relabel/show the right knobs, (re)build engine
 function setGenType(type) {
-  if (GEN.type===type) return;
   GEN.type = type;
   document.querySelectorAll("#gen-type button").forEach(b=>b.classList.toggle("active", b.dataset.t===type));
   document.getElementById("lbl-gratio").textContent = type==="spiro" ? "GIRI INTERNI" : "RAPPORTO X:Y";
   document.getElementById("lbl-gharm").textContent  = type==="spiro" ? "RAGGIO INT."  : "ARMONICA";
-  if (GEN.on) { stopGen(); startGen(); }
+  // SORGENTI uses only RAPPORTO + FASE (combines the two selectable sources);
+  // the engines also use FREQUENZA + ARMONICA/RAGGIO
+  const engine = (type!=="sorgenti");
+  document.getElementById("row-gbase").style.display = engine ? "flex" : "none";
+  document.getElementById("row-gharm").style.display = engine ? "flex" : "none";
+  stopGen();
+  applyGenMode();
+  refreshChannelCards();
 }
 
 // ── Draw → audio → XY ────────────────────────────────────────────────────────
@@ -736,32 +752,43 @@ async function drawConvert() {
 
 // ── Controls ───────────────────────────────────────────────────────────────
 function setMode(m) {
-  // a drawn shape now survives every view: X-Y shows the figure, ONDA shows its
-  // two source waves X(t)/Y(t). It's torn down only by PULISCI or a source change.
-  // GENERA runs its own oscillator engine while its tab is active.
-  if (G.mode==="genera" && m!=="genera") stopGen();
+  // a drawn shape survives every view; the X-Y generative engines run only in X-Y.
+  if (m !== "xy") stopGen();
   G.mode = m;
   if (m !== "draw") DRAW.active = false;
-  ["wave","xy","draw","genera"].forEach(id => {
+  ["wave","xy","draw"].forEach(id => {
     const btn = document.getElementById("tab-"+id);
     btn.className = m===id?"active":"";
     btn.style.color = m===id?"#39ff14":"#555";
     btn.style.boxShadow = m===id?"inset 0 -2px 0 #39ff14":"none";
   });
-  const label = { wave:"ONDA", xy:"X-Y", draw:"DISEGNA", genera:"GENERA" }[m] || m.toUpperCase();
+  const label = { wave:"ONDA", xy:"X-Y", draw:"DISEGNA" }[m] || m.toUpperCase();
   document.getElementById("screen-label").textContent = label;
   // axis pickers only matter in X-Y; SU-GIU' (vertical offset) only in ONDA/DISEGNA
   [0,1].forEach(i => {
     document.getElementById("axis-row-ch"+i).style.display = m==="xy"?"block":"none";
     document.getElementById("yoff-row-ch"+i).style.display = m==="xy"?"none":"flex";
-    // GENERA has its own engine → hide the per-channel cards to keep focus
-    document.getElementById("card-ch"+i).style.display = m==="genera"?"none":"";
   });
   document.getElementById("draw-card").style.display = m==="draw"?"":"none";
-  document.getElementById("genera-card").style.display = m==="genera"?"":"none";
-  if (m === "genera") startGen();
+  document.getElementById("combina-card").style.display = m==="xy"?"":"none";
+  if (m === "xy") applyGenMode();        // start engine / show channels per COMBINA type
   if (m === "draw") startSketch();
   else clearScreen();
+  refreshChannelCards();
+}
+
+// in X-Y, the synthetic engines (lissajous/spiro) hide the per-channel cards;
+// SORGENTI keeps them visible (you pick the two sources)
+function refreshChannelCards() {
+  const hide = (G.mode==="xy" && GEN.type!=="sorgenti");
+  [0,1].forEach(i => { document.getElementById("card-ch"+i).style.display = hide?"none":""; });
+}
+
+// reconcile the engine with the current COMBINA type (only meaningful in X-Y)
+function applyGenMode() {
+  if (G.mode!=="xy") { stopGen(); return; }
+  if (GEN.type==="lissajous" || GEN.type==="spiro") startGen();
+  else stopGen();                       // SORGENTI → no synthetic engine
 }
 
 // sync the toggle button, card opacity and LED to ch.enabled
@@ -1050,7 +1077,8 @@ window.addEventListener("load", ()=>{
   bindMixVol(null, "vol-master", "vv-master");
   refreshMuteBtn("master");
 
-  // init mode tab styles
+  // init COMBINA panel (labels + which knobs show) and mode tab styles
+  setGenType("sorgenti");
   setMode("wave");
 
   requestAnimationFrame(loop);
