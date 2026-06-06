@@ -79,6 +79,20 @@ body {
 }
 .led-label { font-size: 7px; color: var(--ink); letter-spacing: 1px; }
 
+/* ── STAGE (sticky) ── keeps the scope + tabs + transport on screen while
+   the controls below scroll past. */
+#stage {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--bg);
+  padding: 8px 0;
+  box-shadow: 0 5px 0 -1px rgba(0,0,80,0.10);
+}
+
 /* ── SCREEN ── */
 #screen-wrap {
   border: var(--border);
@@ -114,13 +128,11 @@ canvas {
   letter-spacing: 2px;
 }
 
-/* ── CONTROLS ── */
+/* ── CONTROLS ── (the page itself scrolls; the stage above stays pinned) */
 #controls {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  overflow-y: auto;
-  flex: 1;
 }
 
 .section-label {
@@ -136,7 +148,6 @@ canvas {
 .tabbar {
   display: flex;
   gap: 4px;
-  margin-top: 6px;
 }
 
 .tabbar button {

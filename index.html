@@ -7,7 +7,7 @@
   Visual style: Dr. Pira / Fumetti della Gleba (https://fumettidellagleba.org).
   Licensed under GPLv3 — see LICENSE.
 -->
-<html lang="en">
+<html lang="it">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
@@ -20,29 +20,32 @@
   <div><span id="title">OSCILLOSCOPIO<br>DELLA GLEBA</span><span id="subtitle">DS-2M</span></div>
   <div id="leds">
     <div class="led-group"><div class="led" id="led-run"></div><span class="led-label">ON</span></div>
-    <div class="led-group"><div class="led" id="led-ch1"></div><span class="led-label">CH1</span></div>
-    <div class="led-group"><div class="led" id="led-ch2"></div><span class="led-label">CH2</span></div>
+    <div class="led-group"><div class="led" id="led-ch1"></div><span class="led-label">C1</span></div>
+    <div class="led-group"><div class="led" id="led-ch2"></div><span class="led-label">C2</span></div>
   </div>
 </div>
 
-<div id="screen-wrap">
-  <canvas id="scope"></canvas>
-  <div id="screen-label">● WAVE</div>
-  <div id="mode-label">WAVE</div>
+<!-- Sticky stage: screen + mode tabs + transport stay visible while controls scroll -->
+<div id="stage">
+  <div id="screen-wrap">
+    <canvas id="scope"></canvas>
+    <div id="screen-label">● ONDA</div>
+    <div id="mode-label">ONDA</div>
+  </div>
+
+  <div class="tabbar">
+    <button id="tab-wave" class="active" onclick="setMode('wave')">ONDA</button>
+    <button id="tab-xy"   onclick="setMode('xy')">X VS Y</button>
+    <button id="tab-draw" onclick="setMode('draw')">DISEGNA</button>
+  </div>
+
+  <div id="transport">
+    <button id="btn-run" onclick="toggleRun()">■&nbsp;&nbsp;STOP</button>
+    <button id="btn-clr" onclick="clearScreen()">PULISCI</button>
+  </div>
 </div>
 
 <div id="controls">
-
-  <!-- Display mode -->
-  <div>
-    <span class="section-label">MODALITA' VISIVA</span>
-    <div class="tabbar" style="margin-top:6px">
-      <button id="tab-wave" class="active" onclick="setMode('wave')">ONDA</button>
-      <button id="tab-dot"  onclick="setMode('dot')">PUNTINO</button>
-      <button id="tab-xy"   onclick="setMode('xy')">X VS Y</button>
-      <button id="tab-draw" onclick="setMode('draw')">DISEGNA</button>
-    </div>
-  </div>
 
   <!-- Draw mode -->
   <div class="ch-card" id="draw-card" style="display:none; background:var(--cyan)">
@@ -61,7 +64,7 @@
     </div>
   </div>
 
-  <!-- Global -->
+  <!-- Global + trigger -->
   <div class="ch-card" style="background:var(--yellow)">
     <span class="section-label">ROBA GLOBALE</span>
     <div class="row-grid">
@@ -70,9 +73,13 @@
         <input type="range" id="sl-time" min="0.2" max="4" step="0.1" value="1" style="accent-color:#fff">
       </div>
       <div class="slider-row">
-        <div class="slider-meta"><span class="sl">NOISE</span><span class="sv" id="v-noise" style="color:#555">0.00</span></div>
+        <div class="slider-meta"><span class="sl">RUMORE</span><span class="sv" id="v-noise" style="color:#555">0.00</span></div>
         <input type="range" id="sl-noise" min="0" max="0.2" step="0.005" value="0" style="accent-color:#555">
       </div>
+    </div>
+    <div class="slider-row">
+      <div class="slider-meta"><span class="sl">TRIGGER — LIVELLO</span><span class="sv" id="v-trig" style="color:#a33">0.00</span></div>
+      <input type="range" id="sl-trig" min="-1" max="1" step="0.05" value="0" style="accent-color:#a33">
     </div>
   </div>
 
@@ -80,24 +87,24 @@
   <div class="ch-card" id="card-ch0">
     <div class="ch-header">
       <div class="ch-dot" id="dot-ch0"></div>
-      <span class="ch-name" id="name-ch0">CH 1</span>
+      <span class="ch-name" id="name-ch0">CANALE 1</span>
       <button class="ch-toggle on" id="toggle-ch0" onclick="toggleCh(0)">ON</button>
     </div>
 
     <div>
-      <span class="sl" style="font-size:9px;letter-spacing:1px;color:#444">SORGENS</span>
+      <span class="sl" style="font-size:9px;letter-spacing:1px;color:#444">SORGENTE</span>
       <div class="seg" style="margin-top:4px" id="src-ch0">
-        <button class="active" data-v="synth" onclick="setSrc(0,this)">SINTETI</button>
-        <button data-v="mic" onclick="setSrc(0,this)">MICROFUN</button>
+        <button class="active" data-v="synth" onclick="setSrc(0,this)">SINTET.</button>
+        <button data-v="mic" onclick="setSrc(0,this)">MICRO 🎤</button>
       </div>
     </div>
 
     <div id="synth-ch0">
-      <span class="sl" style="font-size:9px;letter-spacing:1px;color:#444">FORMA ONDA</span>
+      <span class="sl" style="font-size:9px;letter-spacing:1px;color:#444">FORMA D'ONDA</span>
       <div class="seg" style="margin-top:4px">
         <button class="active" data-w="sine"     onclick="setWave(0,this)">SIN</button>
-        <button data-w="square"   onclick="setWave(0,this)">SQR</button>
-        <button data-w="sawtooth" onclick="setWave(0,this)">SAW</button>
+        <button data-w="square"   onclick="setWave(0,this)">QUA</button>
+        <button data-w="sawtooth" onclick="setWave(0,this)">DEN</button>
         <button data-w="triangle" onclick="setWave(0,this)">TRI</button>
       </div>
     </div>
@@ -108,15 +115,15 @@
         <input type="range" id="sl-freq-ch0" min="0.2" max="10" step="0.1" value="2">
       </div>
       <div class="slider-row" id="amp-row-ch0">
-        <div class="slider-meta"><span class="sl">AMPL</span><span class="sv" id="v-amp-ch0">0.75</span></div>
+        <div class="slider-meta"><span class="sl">AMPIEZZA</span><span class="sv" id="v-amp-ch0">0.75</span></div>
         <input type="range" id="sl-amp-ch0" min="0" max="1" step="0.01" value="0.75">
       </div>
       <div class="slider-row" id="pitch-row-ch0">
-        <div class="slider-meta"><span class="sl">PITCH</span><span class="sv" id="v-pitch-ch0">220Hz</span></div>
+        <div class="slider-meta"><span class="sl">TONO</span><span class="sv" id="v-pitch-ch0">220Hz</span></div>
         <input type="range" id="sl-pitch-ch0" min="50" max="2000" step="1" value="220">
       </div>
       <div class="slider-row" id="gain-row-ch0" style="display:none">
-        <div class="slider-meta"><span class="sl">GAIN</span><span class="sv" id="v-gain-ch0">×2.0</span></div>
+        <div class="slider-meta"><span class="sl">GUADAGNO</span><span class="sv" id="v-gain-ch0">×2.0</span></div>
         <input type="range" id="sl-gain-ch0" min="0.1" max="10" step="0.1" value="2">
       </div>
       <div class="slider-row">
@@ -126,7 +133,7 @@
     </div>
 
     <div id="axis-row-ch0" style="display:none">
-      <span class="sl" style="font-size:9px;letter-spacing:1px;color:#444">ASSE (XY)</span>
+      <span class="sl" style="font-size:9px;letter-spacing:1px;color:#444">ASSE (X-Y)</span>
       <div class="seg" style="margin-top:4px" id="axis-ch0">
         <button class="active" data-v="x" onclick="setAxis(0,this)">X</button>
         <button data-v="y" onclick="setAxis(0,this)">Y</button>
@@ -143,24 +150,24 @@
   <div class="ch-card ch-odd" id="card-ch1">
     <div class="ch-header">
       <div class="ch-dot" id="dot-ch1"></div>
-      <span class="ch-name" id="name-ch1">CH 2</span>
+      <span class="ch-name" id="name-ch1">CANALE 2</span>
       <button class="ch-toggle on" id="toggle-ch1" onclick="toggleCh(1)">ON</button>
     </div>
 
     <div>
-      <span class="sl" style="font-size:9px;letter-spacing:1px;color:#444">SOURCE</span>
+      <span class="sl" style="font-size:9px;letter-spacing:1px;color:#444">SORGENTE</span>
       <div class="seg" style="margin-top:4px" id="src-ch1">
-        <button class="active" data-v="synth" onclick="setSrc(1,this)">SYNTH</button>
-        <button data-v="mic" onclick="setSrc(1,this)">MIC 🎤</button>
+        <button class="active" data-v="synth" onclick="setSrc(1,this)">SINTET.</button>
+        <button data-v="mic" onclick="setSrc(1,this)">MICRO 🎤</button>
       </div>
     </div>
 
     <div id="synth-ch1">
-      <span class="sl" style="font-size:9px;letter-spacing:1px;color:#444">WAVEFORM</span>
+      <span class="sl" style="font-size:9px;letter-spacing:1px;color:#444">FORMA D'ONDA</span>
       <div class="seg" style="margin-top:4px">
         <button class="active" data-w="sine"     onclick="setWave(1,this)">SIN</button>
-        <button data-w="square"   onclick="setWave(1,this)">SQR</button>
-        <button data-w="sawtooth" onclick="setWave(1,this)">SAW</button>
+        <button data-w="square"   onclick="setWave(1,this)">QUA</button>
+        <button data-w="sawtooth" onclick="setWave(1,this)">DEN</button>
         <button data-w="triangle" onclick="setWave(1,this)">TRI</button>
       </div>
     </div>
@@ -171,25 +178,25 @@
         <input type="range" id="sl-freq-ch1" min="0.2" max="10" step="0.1" value="3">
       </div>
       <div class="slider-row" id="amp-row-ch1">
-        <div class="slider-meta"><span class="sl">AMPL</span><span class="sv" id="v-amp-ch1">0.75</span></div>
+        <div class="slider-meta"><span class="sl">AMPIEZZA</span><span class="sv" id="v-amp-ch1">0.75</span></div>
         <input type="range" id="sl-amp-ch1" min="0" max="1" step="0.01" value="0.75">
       </div>
       <div class="slider-row" id="pitch-row-ch1">
-        <div class="slider-meta"><span class="sl">PITCH</span><span class="sv" id="v-pitch-ch1">330Hz</span></div>
+        <div class="slider-meta"><span class="sl">TONO</span><span class="sv" id="v-pitch-ch1">330Hz</span></div>
         <input type="range" id="sl-pitch-ch1" min="50" max="2000" step="1" value="330">
       </div>
       <div class="slider-row" id="gain-row-ch1" style="display:none">
-        <div class="slider-meta"><span class="sl">GAIN</span><span class="sv" id="v-gain-ch1">×2.0</span></div>
+        <div class="slider-meta"><span class="sl">GUADAGNO</span><span class="sv" id="v-gain-ch1">×2.0</span></div>
         <input type="range" id="sl-gain-ch1" min="0.1" max="10" step="0.1" value="2">
       </div>
       <div class="slider-row">
-        <div class="slider-meta"><span class="sl">Y OFFSET</span><span class="sv" id="v-yoff-ch1">0.0</span></div>
+        <div class="slider-meta"><span class="sl">SU-GIU'</span><span class="sv" id="v-yoff-ch1">0.0</span></div>
         <input type="range" id="sl-yoff-ch1" min="-2" max="2" step="0.1" value="0">
       </div>
     </div>
 
     <div id="axis-row-ch1" style="display:none">
-      <span class="sl" style="font-size:9px;letter-spacing:1px;color:#444">AXIS (XY mode)</span>
+      <span class="sl" style="font-size:9px;letter-spacing:1px;color:#444">ASSE (X-Y)</span>
       <div class="seg" style="margin-top:4px" id="axis-ch1">
         <button data-v="x" onclick="setAxis(1,this)">X</button>
         <button class="active" data-v="y" onclick="setAxis(1,this)">Y</button>
@@ -197,12 +204,12 @@
     </div>
 
     <div>
-      <span class="sl" style="font-size:9px;letter-spacing:1px;color:#444;display:block;margin-bottom:6px">COLOR</span>
+      <span class="sl" style="font-size:9px;letter-spacing:1px;color:#444;display:block;margin-bottom:6px">COLORE</span>
       <div class="swatches" id="swatches-ch1"></div>
     </div>
   </div>
 
-  <!-- Mixer -->
+  <!-- Mixer (per channel) -->
   <div class="ch-card" id="mixer-card" style="background:var(--red)">
     <span class="section-label" style="color:#fff;border-color:#fff">MIXER AUDIO</span>
 
@@ -217,54 +224,23 @@
 
     <div class="mix-strip">
       <div class="mix-head">
-        <span class="mix-name">SYNTH 1</span>
-        <span class="sv" id="vv-synth0">0.30</span>
-        <button class="mix-mute muted" id="mute-synth0" onclick="mixMute('synth0')">MUTO</button>
+        <span class="mix-name" id="mixname-ch0">CANALE 1</span>
+        <span class="sv" id="vv-ch0">0.60</span>
+        <button class="mix-mute muted" id="mute-ch0" onclick="mixChanMute(0)">MUTO</button>
       </div>
-      <input type="range" id="vol-synth0" min="0" max="1" step="0.01" value="0.3">
+      <input type="range" id="vol-ch0" min="0" max="1" step="0.01" value="0.6">
     </div>
 
     <div class="mix-strip">
       <div class="mix-head">
-        <span class="mix-name">SYNTH 2</span>
-        <span class="sv" id="vv-synth1">0.30</span>
-        <button class="mix-mute muted" id="mute-synth1" onclick="mixMute('synth1')">MUTO</button>
+        <span class="mix-name" id="mixname-ch1">CANALE 2</span>
+        <span class="sv" id="vv-ch1">0.60</span>
+        <button class="mix-mute muted" id="mute-ch1" onclick="mixChanMute(1)">MUTO</button>
       </div>
-      <input type="range" id="vol-synth1" min="0" max="1" step="0.01" value="0.3">
-    </div>
-
-    <div class="mix-strip">
-      <div class="mix-head">
-        <span class="mix-name">MICROFUN</span>
-        <span class="sv" id="vv-mic">0.50</span>
-        <button class="mix-mute muted" id="mute-mic" onclick="mixMute('mic')">MUTO</button>
-      </div>
-      <input type="range" id="vol-mic" min="0" max="1" step="0.01" value="0.5">
-    </div>
-
-    <div class="mix-strip">
-      <div class="mix-head">
-        <span class="mix-name">DISEGNA</span>
-        <span class="sv" id="vv-draw">0.60</span>
-        <button class="mix-mute" id="mute-draw" onclick="mixMute('draw')">SUONA</button>
-      </div>
-      <input type="range" id="vol-draw" min="0" max="1" step="0.01" value="0.6">
+      <input type="range" id="vol-ch1" min="0" max="1" step="0.01" value="0.6">
     </div>
   </div>
 
-  <!-- Global trigger -->
-  <div class="trigger-card">
-    <span class="section-label">TRIGGERO</span>
-    <div class="slider-row">
-      <div class="slider-meta"><span class="sl">LEVEL</span><span class="sv" id="v-trig" style="color:#ffdd00">0.00</span></div>
-      <input type="range" id="sl-trig" min="-1" max="1" step="0.05" value="0" style="accent-color:#ffdd00">
-    </div>
-  </div>
-
-  <div id="transport">
-    <button id="btn-run" onclick="toggleRun()">STOP!!</button>
-    <button id="btn-clr" onclick="clearScreen()">CLR</button>
-  </div>
 </div>
 
 <script src="app.js"></script>
