@@ -82,25 +82,8 @@ function ensureAudio() {
     routeChannel(i);                 // wire the channel's current source in
     applyChan(i);
   });
-  // SDOPPIA audio: a wet, modulated delayed copy of the program (chorus → echo)
-  AUDIO.doppiaDelay = ctx.createDelay(0.1); AUDIO.doppiaDelay.delayTime.value = 0.025;
-  AUDIO.doppiaWet   = ctx.createGain();     AUDIO.doppiaWet.gain.value = 0;
-  AUDIO.master.connect(AUDIO.doppiaDelay).connect(AUDIO.doppiaWet).connect(ctx.destination);
-  AUDIO.doppiaLFO   = ctx.createOscillator(); AUDIO.doppiaLFO.frequency.value = 0.8;
-  AUDIO.doppiaDepth = ctx.createGain();       AUDIO.doppiaDepth.gain.value = 0;
-  AUDIO.doppiaLFO.connect(AUDIO.doppiaDepth).connect(AUDIO.doppiaDelay.delayTime);
-  AUDIO.doppiaLFO.start();
-  applyDoppiaAudio();
   if (ctx.state==="suspended") ctx.resume();
   return ctx;
-}
-
-// SDOPPIA → audible doubling: wet level + chorus depth scale with MOD.doppio
-function applyDoppiaAudio() {
-  if (!AUDIO.doppiaWet) return;
-  const t = AUDIO.ctx.currentTime, d = MOD.doppio;
-  AUDIO.doppiaWet.gain.setTargetAtTime(d*0.5, t, 0.05);     // wet copy level
-  AUDIO.doppiaDepth.gain.setTargetAtTime(d*0.004, t, 0.05); // ±4ms chorus sweep
 }
 
 // (re)build the additive oscillator bank for a synth channel from CH[i].partials.
@@ -295,48 +278,19 @@ function drawXY() {
   paintXY(pts, colA, colB);
 }
 
-// ── MODULA: movement & rhythm applied to any X-Y figure ──────────────────────
-const MOD = { rot:0, pulse:0, doppio:0, tragitto:0 };
-
-// pulse envelope (1 at each beat → decays). pulse=0 → steady (1).
-function pulseHit() {
-  if (MOD.pulse<=0) return 1;
-  const phase = ((t0/1000)*MOD.pulse) % 1;
-  const d = 1-phase;
-  return d*d;                          // sharp-ish percussive decay
-}
-
-// transform + stroke the figure with rotation / scale(pulse) / translation /
-// optional doubled copy, in the channel-colour gradient
+// stroke the X-Y figure in the channel-colour gradient (no transforms)
 function paintXY(pts, colA, colB) {
-  const cx=W/2, cy=H/2, tsec=t0/1000;
-  const th = MOD.rot*tsec*Math.PI*2, cosT=Math.cos(th), sinT=Math.sin(th);
-  const sc = 0.30 + 0.70*pulseHit();          // PULSO scales the figure visually
-  const dx = MOD.tragitto*W*0.18*Math.sin(tsec*0.70);
-  const dy = MOD.tragitto*H*0.18*Math.sin(tsec*0.93);
   const grad = offCtx.createLinearGradient(0,0,W,H);
   grad.addColorStop(0, colA); grad.addColorStop(1, colB);
   const glow = blendHex(colA, colB);
-  const drawCopy = (ox,oy,scale,alpha) => {
-    const tf = ([x,y]) => {
-      const X=(x-cx)*scale, Y=(y-cy)*scale;
-      return [cx + X*cosT - Y*sinT + dx + ox, cy + X*sinT + Y*cosT + dy + oy];
-    };
-    const path = lw => {
-      offCtx.beginPath();
-      pts.forEach((p,i)=>{ const [px,py]=tf(p); i?offCtx.lineTo(px,py):offCtx.moveTo(px,py); });
-      offCtx.lineWidth=lw; offCtx.stroke();
-    };
-    offCtx.globalAlpha=alpha;
-    offCtx.shadowBlur=0; offCtx.strokeStyle=glow+"33"; path(4);
-    offCtx.shadowBlur=8; offCtx.shadowColor=glow; offCtx.strokeStyle=grad; path(1.5);
-    offCtx.globalAlpha=1; offCtx.shadowBlur=0;
+  const path = lw => {
+    offCtx.beginPath();
+    pts.forEach(([px,py],i)=>{ i?offCtx.lineTo(px,py):offCtx.moveTo(px,py); });
+    offCtx.lineWidth=lw; offCtx.stroke();
   };
-  drawCopy(0, 0, sc, 1);
-  if (MOD.doppio>0) {
-    const off = MOD.doppio*W*0.16;
-    drawCopy(off, -off*0.6, sc*(1-0.25*MOD.doppio), 0.55);
-  }
+  offCtx.shadowBlur=0; offCtx.strokeStyle=glow+"33"; path(4);
+  offCtx.shadowBlur=8; offCtx.shadowColor=glow; offCtx.strokeStyle=grad; path(1.5);
+  offCtx.shadowBlur=0;
 }
 
 // ── Render loop ────────────────────────────────────────────────────────────
@@ -348,13 +302,6 @@ function loop(ts) {
   offCtx.fillStyle="rgba(0,0,0,0.2)"; offCtx.fillRect(0,0,W,H);
   if (G.mode==="wave")    drawWave();
   else if (G.mode==="xy") drawXY();
-
-  // PULSO drives the master amplitude too → the rhythm is audible (X-Y only)
-  if (AUDIO.master) {
-    const g = (G.mode==="xy" && MOD.pulse>0) ? AUDIO.masterVol*(0.15+0.85*pulseHit())
-                                             : (AUDIO.masterMute?0:AUDIO.masterVol);
-    AUDIO.master.gain.setTargetAtTime(g, AUDIO.ctx.currentTime, 0.008);
-  }
 
   ctx.fillStyle="#000"; ctx.fillRect(0,0,W,H);
   ctx.drawImage(off,0,0);
@@ -555,7 +502,7 @@ function applyPreset(name) {
     if (sl) sl.value=pitch; if (vv) vv.textContent=pitch.toFixed(0)+"Hz";
     buildChannelSynth(i); renderPartials(i);
   });
-  if (name==="reset") resetEverything();   // RESET wipes MODULA + synth params too
+  if (name==="reset") resetEverything();   // RESET wipes the per-channel synth params too
   highlightPreset(name);          // light up the chosen preset button
 }
 
@@ -565,15 +512,9 @@ function setSliderUI(slId, vvId, val, fmt) {
   if (s) s.value=val; if (v) v.textContent=fmt(val);
 }
 
-// full reset of everything RESET should touch beyond the oscillators: the MODULA
-// movement/rhythm layer and the per-channel synth params (amp, gain, offset, wave)
+// full reset of everything RESET should touch beyond the oscillators:
+// the per-channel synth params (amp, gain, offset, waveform)
 function resetEverything() {
-  MOD.rot=0; MOD.pulse=0; MOD.doppio=0; MOD.tragitto=0;
-  setSliderUI("sl-mrot","v-mrot",0,v=>v.toFixed(2));
-  setSliderUI("sl-mpulse","v-mpulse",0,v=>v.toFixed(1));
-  setSliderUI("sl-mdop","v-mdop",0,v=>v.toFixed(2));
-  setSliderUI("sl-mtrag","v-mtrag",0,v=>v.toFixed(2));
-  applyDoppiaAudio();                       // kill the wet copy on reset
   [0,1].forEach(i=>{
     const ch=CH[i];
     ch.amp=0.75; ch.gain=2; ch.yOff=0; ch.waveform="sine";
@@ -776,13 +717,6 @@ function clearScreen() {
 window.addEventListener("load", ()=>{
   initCanvas();
   new ResizeObserver(initCanvas).observe(canvas);
-
-  // MODULA: movement & rhythm
-  bindSlider("sl-mrot",   "v-mrot",   MOD, "rot",      v=>v.toFixed(2));
-  bindSlider("sl-mpulse", "v-mpulse", MOD, "pulse",    v=>v.toFixed(1));
-  bindSlider("sl-mdop",   "v-mdop",   MOD, "doppio",   v=>v.toFixed(2));
-  document.getElementById("sl-mdop").addEventListener("input", applyDoppiaAudio);
-  bindSlider("sl-mtrag",  "v-mtrag",  MOD, "tragitto", v=>v.toFixed(2));
 
   // line-input device picker: switch interface and re-point the active channels
   document.getElementById("input-device").addEventListener("change", async e=>{
