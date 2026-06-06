@@ -32,7 +32,6 @@
     <button id="tab-wave" class="active" onclick="setMode('wave')">ONDA</button>
     <button id="tab-xy"   onclick="setMode('xy')">X VS Y</button>
     <button id="tab-draw" onclick="setMode('draw')">DISEGNA</button>
-    <button id="tab-genera" onclick="setMode('genera')">GENERA</button>
   </div>
 
   <div id="transport">
@@ -59,32 +58,33 @@
     </div>
   </div>
 
-  <!-- Generative mode -->
-  <div class="ch-card" id="genera-card" style="display:none; background:var(--cyan)">
-    <span class="section-label">GENERA</span>
+  <!-- X-Y combination panel (shown in X VS Y mode) -->
+  <div class="ch-card" id="combina-card" style="display:none; background:var(--cyan)">
+    <span class="section-label">COMBINA X-Y</span>
     <div class="seg" id="gen-type" style="margin-top:0">
-      <button class="active" data-t="lissajous" onclick="setGenType('lissajous')">LISSAJOUS</button>
+      <button class="active" data-t="sorgenti" onclick="setGenType('sorgenti')">SORGENTI</button>
+      <button data-t="lissajous" onclick="setGenType('lissajous')">LISSAJOUS</button>
       <button data-t="spiro" onclick="setGenType('spiro')">SPIROGRAFO</button>
     </div>
     <p style="font-size:8px; line-height:1.7; color:var(--ink)">
-      Due segnali generano figura e suono stereo. Gioca con le manopole: il
-      RAPPORTO/GIRI decide la forma, la FASE la ruota, l'ARMONICA/RAGGIO la
-      arricchisce. Valori interi = figure ferme; vicini all'intero = ruotano.
+      SORGENTI: combina i due canali (anche mic/linea) — FASE ruota la figura,
+      RAPPORTO aggancia i synth. LISSAJOUS e SPIROGRAFO sono motori che generano
+      figura e suono stereo. Valori interi = figure ferme; vicini = ruotano.
     </p>
     <div class="row-grid">
-      <div class="slider-row">
+      <div class="slider-row" id="row-gbase">
         <div class="slider-meta"><span class="sl">FREQUENZA</span><span class="sv" id="v-gbase">110Hz</span></div>
         <input type="range" id="sl-gbase" min="40" max="800" step="1" value="110">
       </div>
-      <div class="slider-row">
+      <div class="slider-row" id="row-gratio">
         <div class="slider-meta"><span class="sl" id="lbl-gratio">RAPPORTO X:Y</span><span class="sv" id="v-gratio">2.00</span></div>
-        <input type="range" id="sl-gratio" min="0.5" max="5" step="0.01" value="2">
+        <input type="range" id="sl-gratio" min="0.5" max="8" step="0.01" value="2">
       </div>
-      <div class="slider-row">
+      <div class="slider-row" id="row-gharm">
         <div class="slider-meta"><span class="sl" id="lbl-gharm">ARMONICA</span><span class="sv" id="v-gharm">0.00</span></div>
         <input type="range" id="sl-gharm" min="0" max="1" step="0.01" value="0">
       </div>
-      <div class="slider-row">
+      <div class="slider-row" id="row-gphase">
         <div class="slider-meta"><span class="sl">FASE</span><span class="sv" id="v-gphase">0.25</span></div>
         <input type="range" id="sl-gphase" min="0" max="1" step="0.01" value="0.25">
       </div>
