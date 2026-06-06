@@ -343,6 +343,29 @@ input[type=range]::-webkit-slider-thumb {
 
 #btn-clr:active { transform: translate(4px,4px); box-shadow: none; }
 
+/* ── MIXER ── */
+.mix-strip { display: flex; flex-direction: column; gap: 5px; }
+.mix-strip + .mix-strip { border-top: 2px solid rgba(0,0,0,0.25); padding-top: 8px; }
+.mix-master { border-bottom: 2px solid var(--ink); padding-bottom: 10px; }
+
+.mix-head { display: flex; align-items: center; gap: 8px; }
+.mix-name { font-size: 8px; color: #fff; letter-spacing: 1px; }
+.mix-head .sv { margin-left: auto; font-size: 9px; color: #fff; }
+
+.mix-mute {
+  background: var(--white);
+  border: var(--border);
+  box-shadow: 2px 2px 0 var(--ink);
+  padding: 4px 7px;
+  cursor: pointer;
+  font-size: 7px;
+  font-family: 'Press Start 2P', monospace;
+  color: var(--ink);
+  -webkit-tap-highlight-color: transparent;
+}
+.mix-mute:active { transform: translate(2px,2px); box-shadow: none; }
+.mix-mute.muted { background: var(--ink); color: var(--red); }
+
 /* trigger card */
 .trigger-card {
   border: var(--border);

@@ -74,10 +74,10 @@ function catmullRom(cp, N) {
 const G = { timebase:1, noise:0, trig:0, mode:"wave", running:true };
 
 const CH = [
-  { enabled:true, src:"synth", waveform:"sine", freq:2, amp:0.75, gain:2, yOff:0, color:"#39ff14", axis:"x",
-    stream:null, actx:null, analyser:null, micBuf:null, micOk:false },
-  { enabled:true, src:"synth", waveform:"sine", freq:3, amp:0.75, gain:2, yOff:0, color:"#00cfff", axis:"y",
-    stream:null, actx:null, analyser:null, micBuf:null, micOk:false },
+  { enabled:true, src:"synth", waveform:"sine", freq:2, pitch:220, amp:0.75, gain:2, yOff:0, color:"#39ff14", axis:"x",
+    stream:null, micNode:null, analyser:null, micBuf:null, micOk:false },
+  { enabled:true, src:"synth", waveform:"sine", freq:3, pitch:330, amp:0.75, gain:2, yOff:0, color:"#00cfff", axis:"y",
+    stream:null, micNode:null, analyser:null, micBuf:null, micOk:false },
 ];
 
 // ── Draw mode state (image → audio → XY) ─────────────────────────────────────
@@ -88,9 +88,100 @@ const DRAW = {
   freq:220,         // loop frequency (Hz) → buffer length = sampleRate / freq
   N:0,              // samples per loop period (one cycle) for stable rendering
   saved:null,       // channel state to restore when draw playback ends
-  actx:null, src:null, splitter:null, merger:null, gain:null,
+  src:null, splitter:null, merger:null,
   analyserX:null, analyserY:null,
 };
+
+// ── Mixer / shared audio graph ───────────────────────────────────────────────
+// One AudioContext for everyone. Each source feeds its own strip gain, all of
+// which sum into the master gain → speakers:
+//
+//   synth0 osc ─┐
+//   synth1 osc ─┤
+//   mic source ─┼─► strip.gain ─► master ─► destination
+//   draw merger ┘
+//
+// Audibility is governed entirely by strip gains, so oscillators can run
+// continuously and mute/volume changes never click (setTargetAtTime ramps).
+const AUDIO = {
+  ctx:null, master:null,
+  masterVol:0.7, masterMute:false,
+  strips:{
+    synth0:{ vol:0.3, mute:true,  gain:null, osc:null },
+    synth1:{ vol:0.3, mute:true,  gain:null, osc:null },
+    mic:   { vol:0.5, mute:true,  gain:null },           // muted by default → no Larsen
+    draw:  { vol:0.6, mute:false, gain:null },
+  },
+};
+
+// Waveform names already match OscillatorNode.type values 1:1.
+const oscType = wf => wf;
+
+// Create the shared context + graph on first use (must run inside a user gesture).
+function ensureAudio() {
+  if (AUDIO.ctx) { if (AUDIO.ctx.state==="suspended") AUDIO.ctx.resume(); return AUDIO.ctx; }
+  const ctx = new (window.AudioContext||window.webkitAudioContext)();
+  AUDIO.ctx = ctx;
+  AUDIO.master = ctx.createGain();
+  AUDIO.master.gain.value = AUDIO.masterMute ? 0 : AUDIO.masterVol;
+  AUDIO.master.connect(ctx.destination);
+  for (const key in AUDIO.strips) {
+    const s = AUDIO.strips[key];
+    s.gain = ctx.createGain();
+    s.gain.gain.value = 0;            // applyStrip sets the real value below
+    s.gain.connect(AUDIO.master);
+  }
+  startSynthOsc(0); startSynthOsc(1);
+  ["synth0","synth1","mic","draw"].forEach(applyStrip);
+  if (ctx.state==="suspended") ctx.resume();
+  return ctx;
+}
+
+function startSynthOsc(i) {
+  const s = AUDIO.strips["synth"+i];
+  if (!AUDIO.ctx || s.osc) return;
+  const osc = AUDIO.ctx.createOscillator();
+  osc.type = oscType(CH[i].waveform);
+  osc.frequency.value = CH[i].pitch;
+  osc.connect(s.gain);
+  osc.start();
+  s.osc = osc;
+}
+
+// a synth strip is only audible while its channel actually uses the synth source
+function synthAudible(i) { return CH[i].src === "synth"; }
+
+function applyStrip(key) {
+  const s = AUDIO.strips[key];
+  if (!s || !s.gain) return;
+  let g = s.mute ? 0 : s.vol;
+  if (key==="synth0" && !synthAudible(0)) g = 0;
+  if (key==="synth1" && !synthAudible(1)) g = 0;
+  s.gain.gain.setTargetAtTime(g, AUDIO.ctx.currentTime, 0.012);
+}
+
+function applyMaster() {
+  if (!AUDIO.master) return;
+  AUDIO.master.gain.setTargetAtTime(AUDIO.masterMute ? 0 : AUDIO.masterVol, AUDIO.ctx.currentTime, 0.012);
+}
+
+function mixMute(key) {
+  AUDIO.strips[key].mute = !AUDIO.strips[key].mute;
+  ensureAudio(); applyStrip(key); refreshMuteBtn(key);
+}
+
+function mixMasterMute() {
+  AUDIO.masterMute = !AUDIO.masterMute;
+  ensureAudio(); applyMaster(); refreshMuteBtn("master");
+}
+
+function refreshMuteBtn(key) {
+  const muted = key==="master" ? AUDIO.masterMute : AUDIO.strips[key].mute;
+  const btn = document.getElementById("mute-"+key);
+  if (!btn) return;
+  btn.textContent = muted ? "MUTO" : "SUONA";
+  btn.classList.toggle("muted", muted);
+}
 
 // ── Canvas ─────────────────────────────────────────────────────────────────
 const canvas = document.getElementById("scope");
@@ -315,11 +406,13 @@ async function startMic(ch) {
     }
     if (!stream) throw new Error("no stream");
     ch.stream = stream;
-    ch.actx = new (window.AudioContext||window.webkitAudioContext)();
-    if (ch.actx.state==="suspended") await ch.actx.resume();
-    ch.analyser = ch.actx.createAnalyser();
+    const actx = ensureAudio();
+    if (actx.state==="suspended") await actx.resume();
+    ch.analyser = actx.createAnalyser();
     ch.analyser.fftSize=2048; ch.analyser.smoothingTimeConstant=0;
-    ch.actx.createMediaStreamSource(stream).connect(ch.analyser);
+    ch.micNode = actx.createMediaStreamSource(stream);
+    ch.micNode.connect(ch.analyser);             // for the scope render
+    ch.micNode.connect(AUDIO.strips.mic.gain);   // for the mixer monitor path
     ch.micBuf = new Float32Array(2048);
     ch.micOk = true;
     return true;
@@ -332,8 +425,10 @@ async function startMic(ch) {
 
 function stopMic(ch) {
   ch.stream?.getTracks().forEach(t=>t.stop());
-  ch.actx?.close();
-  ch.stream=null; ch.actx=null; ch.analyser=null; ch.micBuf=null; ch.micOk=false;
+  try { ch.micNode?.disconnect(); } catch(e){}
+  try { ch.analyser?.disconnect(); } catch(e){}
+  // the AudioContext is shared (the mixer owns it) → never close it here
+  ch.stream=null; ch.micNode=null; ch.analyser=null; ch.micBuf=null; ch.micOk=false;
 }
 
 // ── Draw → audio → XY ────────────────────────────────────────────────────────
@@ -363,6 +458,7 @@ function configureDrawChannel(i, analyser, axis) {
   updateSrcUI(i, "draw");
   setAxisUI(i, axis);
   refreshChannelEnabled(i);
+  applyStrip("synth"+i);   // src is now "draw" → silence this channel's synth tone
 }
 
 function restoreChannelSynth(i) {
@@ -373,12 +469,15 @@ function restoreChannelSynth(i) {
   updateSrcUI(i, "synth");
   setAxisUI(i, ch.axis);
   refreshChannelEnabled(i);
+  applyStrip("synth"+i);   // back to synth source → restore its tone (if unmuted)
 }
 
 function stopDrawAudio() {
-  if (DRAW.src) { try { DRAW.src.stop(); } catch(e){} }
-  if (DRAW.actx) { try { DRAW.actx.close(); } catch(e){} }
-  DRAW.actx = DRAW.src = DRAW.splitter = DRAW.merger = DRAW.gain = null;
+  if (DRAW.src) { try { DRAW.src.stop(); } catch(e){} try { DRAW.src.disconnect(); } catch(e){} }
+  try { DRAW.splitter?.disconnect(); } catch(e){}
+  try { DRAW.merger?.disconnect(); } catch(e){}
+  // the AudioContext is shared (the mixer owns it) → never close it here
+  DRAW.src = DRAW.splitter = DRAW.merger = null;
   DRAW.analyserX = DRAW.analyserY = null;
   DRAW.playing = false;
   [0,1].forEach(i => { if (CH[i].src==="draw") restoreChannelSynth(i); });
@@ -396,7 +495,7 @@ async function drawConvert() {
   let P = P0.map(p => ({ x:(p.x-W/2)*s, y:-(p.y-H/2)*s }));
   P = sortPoints(P);
 
-  const actx = new (window.AudioContext||window.webkitAudioContext)();
+  const actx = ensureAudio();
   if (actx.state==="suspended") await actx.resume();
 
   const N = Math.max(64, Math.round(actx.sampleRate / DRAW.freq));
@@ -415,15 +514,14 @@ async function drawConvert() {
   src.connect(splitter);
   splitter.connect(aX, 0);
   splitter.connect(aY, 1);
-  // also play it (quietly) — it's oscilloscope music after all
+  // play it through the mixer's DRAW strip — it's oscilloscope music after all
   const merger = actx.createChannelMerger(2);
   splitter.connect(merger, 0, 0);
   splitter.connect(merger, 1, 1);
-  const gain = actx.createGain(); gain.gain.value = 0.4;
-  merger.connect(gain).connect(actx.destination);
+  merger.connect(AUDIO.strips.draw.gain);
   src.start();
 
-  Object.assign(DRAW, { actx, src, splitter, merger, gain, analyserX:aX, analyserY:aY, playing:true });
+  Object.assign(DRAW, { src, splitter, merger, analyserX:aX, analyserY:aY, playing:true });
   // remember channel state so we can restore it when playback ends
   DRAW.saved = [0,1].map(i => ({ enabled:CH[i].enabled, axis:CH[i].axis }));
   configureDrawChannel(0, aX, "x");
@@ -481,10 +579,11 @@ function updateSrcUI(i, val) {
     b.style.color       = a?"#000":"#444";
     b.style.borderColor = a?ch.color:"#2a2a2a";
   });
-  document.getElementById("synth-ch"+i).style.display    = val==="synth"?"block":"none";
-  document.getElementById("freq-row-ch"+i).style.display = val==="synth"?"flex":"none";
-  document.getElementById("amp-row-ch"+i).style.display  = val==="synth"?"flex":"none";
-  document.getElementById("gain-row-ch"+i).style.display = val==="mic"?"flex":"none";
+  document.getElementById("synth-ch"+i).style.display     = val==="synth"?"block":"none";
+  document.getElementById("freq-row-ch"+i).style.display  = val==="synth"?"flex":"none";
+  document.getElementById("amp-row-ch"+i).style.display   = val==="synth"?"flex":"none";
+  document.getElementById("pitch-row-ch"+i).style.display = val==="synth"?"flex":"none";
+  document.getElementById("gain-row-ch"+i).style.display  = val==="mic"?"flex":"none";
 }
 
 async function setSrc(i, btn) {
@@ -500,10 +599,13 @@ async function setSrc(i, btn) {
   }
   ch.src = val;
   updateSrcUI(i, val);
+  applyStrip("synth"+i);   // synth tone follows the channel's source selection
 }
 
 function setWave(i, btn) {
   CH[i].waveform = btn.dataset.w;
+  const s = AUDIO.strips["synth"+i];
+  if (s && s.osc) s.osc.type = oscType(CH[i].waveform);
   btn.closest(".seg").querySelectorAll("button").forEach(b=>{
     const a = b===btn;
     b.className = a?"active":"";
@@ -546,12 +648,12 @@ function setColor(i, color) {
     b.style.background=color; b.style.borderColor=color;
   });
   // update slider accent
-  ["sl-freq-ch"+i,"sl-amp-ch"+i,"sl-gain-ch"+i,"sl-yoff-ch"+i].forEach(id=>{
+  ["sl-freq-ch"+i,"sl-amp-ch"+i,"sl-pitch-ch"+i,"sl-gain-ch"+i,"sl-yoff-ch"+i].forEach(id=>{
     const el = document.getElementById(id);
     if (el) el.style.accentColor = color;
   });
   // update value displays
-  ["v-freq-ch"+i,"v-amp-ch"+i,"v-gain-ch"+i,"v-yoff-ch"+i].forEach(id=>{
+  ["v-freq-ch"+i,"v-amp-ch"+i,"v-pitch-ch"+i,"v-gain-ch"+i,"v-yoff-ch"+i].forEach(id=>{
     const el = document.getElementById(id);
     if (el) el.style.color = color;
   });
@@ -629,8 +731,14 @@ window.addEventListener("load", ()=>{
     const ch = CH[i];
     bindSlider(`sl-freq-ch${i}`, `v-freq-ch${i}`, ch, "freq",  v=>v.toFixed(1)+"Hz");
     bindSlider(`sl-amp-ch${i}`,  `v-amp-ch${i}`,  ch, "amp",   v=>v.toFixed(2));
+    bindSlider(`sl-pitch-ch${i}`,`v-pitch-ch${i}`,ch, "pitch", v=>v.toFixed(0)+"Hz");
     bindSlider(`sl-gain-ch${i}`, `v-gain-ch${i}`, ch, "gain",  v=>"×"+v.toFixed(1));
     bindSlider(`sl-yoff-ch${i}`, `v-yoff-ch${i}`, ch, "yOff",  v=>(v>=0?"+":"")+v.toFixed(1));
+    // live-update the audio oscillator pitch (visual freq stays independent)
+    document.getElementById(`sl-pitch-ch${i}`).addEventListener("input", e=>{
+      const s = AUDIO.strips["synth"+i];
+      if (s.osc) s.osc.frequency.setTargetAtTime(parseFloat(e.target.value), AUDIO.ctx.currentTime, 0.01);
+    });
 
     // swatches
     const container = document.getElementById("swatches-ch"+i);
@@ -648,6 +756,26 @@ window.addEventListener("load", ()=>{
     setColor(i, ch.color);
     updateLED(i);
   });
+
+  // mixer: per-source volume faders + master
+  const bindMixVol = (key, slId, vvId, target) => {
+    const sl = document.getElementById(slId), vv = document.getElementById(vvId);
+    if (!sl||!vv) return;
+    vv.textContent = parseFloat(sl.value).toFixed(2);
+    sl.addEventListener("input", ()=>{
+      const v = parseFloat(sl.value);
+      if (key) AUDIO.strips[key].vol = v; else AUDIO.masterVol = v;
+      vv.textContent = v.toFixed(2);
+      ensureAudio();
+      if (key) applyStrip(key); else applyMaster();
+    });
+  };
+  ["synth0","synth1","mic","draw"].forEach(key=>{
+    bindMixVol(key, "vol-"+key, "vv-"+key, key);
+    refreshMuteBtn(key);
+  });
+  bindMixVol(null, "vol-master", "vv-master");
+  refreshMuteBtn("master");
 
   // run LED
   const led = document.getElementById("led-run");
