@@ -420,6 +420,20 @@ input[type=range]::-webkit-slider-thumb {
   background: var(--cyan);
 }
 
+/* ── LINE-INPUT DEVICE PICKER ── */
+.input-device {
+  width: 100%;
+  background: var(--white);
+  color: var(--ink);
+  border: var(--border);
+  box-shadow: 2px 2px 0 var(--ink);
+  padding: 8px 6px;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 7px;
+  line-height: 1.4;
+  -webkit-tap-highlight-color: transparent;
+}
+
 /* ── DESKTOP: scope fixed on the left, config panel scrolls on the right ── */
 @media (min-width: 860px) {
   html { height: 100%; }

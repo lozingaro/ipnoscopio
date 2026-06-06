@@ -74,6 +74,16 @@
     </div>
   </div>
 
+  <!-- Line input device picker (shown only when a channel uses LINEA) -->
+  <div class="ch-card" id="input-card" style="display:none; background:var(--cyan)">
+    <span class="section-label">INGRESSO LINEA</span>
+    <p style="font-size:8px; line-height:1.7; color:var(--ink)">
+      Interfaccia audio: il canale SINISTRO va su CANALE 1, il DESTRO su CANALE 2.
+      Collega il synth e scegli l'ingresso qui sotto.
+    </p>
+    <select id="input-device" class="input-device"></select>
+  </div>
+
   <!-- CH1 -->
   <div class="ch-card" id="card-ch0">
     <div class="ch-header">
@@ -87,6 +97,7 @@
       <div class="seg" style="margin-top:4px" id="src-ch0">
         <button class="active" data-v="synth" onclick="setSrc(0,this)">SINTETIZZATORE</button>
         <button data-v="mic" onclick="setSrc(0,this)">MICROFONO 🎤</button>
+        <button data-v="input" onclick="setSrc(0,this)">LINEA (L)</button>
       </div>
     </div>
 
@@ -146,6 +157,7 @@
       <div class="seg" style="margin-top:4px" id="src-ch1">
         <button class="active" data-v="synth" onclick="setSrc(1,this)">SINTETIZZATORE</button>
         <button data-v="mic" onclick="setSrc(1,this)">MICROFONO 🎤</button>
+        <button data-v="input" onclick="setSrc(1,this)">LINEA (R)</button>
       </div>
     </div>
 
