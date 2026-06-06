@@ -392,7 +392,6 @@ input[type=range]::-webkit-slider-thumb {
 /* ── MIXER ── */
 .mix-strip { display: flex; flex-direction: column; gap: 5px; }
 .mix-strip + .mix-strip { border-top: 2px solid rgba(0,0,0,0.25); padding-top: 8px; }
-.mix-master { border-bottom: 2px solid var(--ink); padding-bottom: 10px; }
 
 .mix-head { display: flex; align-items: center; gap: 8px; }
 .mix-name { font-size: 8px; color: #fff; letter-spacing: 1px; }
