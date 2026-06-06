@@ -170,12 +170,14 @@ function routeChannel(i) {
   const c = AUDIO.chan[i];
   if (!c || !c.gain) return;
   const cg = c.gain;
-  try { c.osc?.disconnect(cg); }        catch(e){}
+  try { c.osc?.disconnect(cg); }         catch(e){}
   try { CH[i].micNode?.disconnect(cg); } catch(e){}
   try { DRAW.tap[i]?.disconnect(cg); }   catch(e){}
+  try { INPUT.tap[i]?.disconnect(cg); }  catch(e){}
   if      (CH[i].src === "synth") c.osc?.connect(cg);
   else if (CH[i].src === "mic")   CH[i].micNode?.connect(cg);
   else if (CH[i].src === "draw")  DRAW.tap[i]?.connect(cg);
+  else if (CH[i].src === "input") INPUT.tap[i]?.connect(cg);
 }
 
 function applyChan(i) {
@@ -283,7 +285,7 @@ function getWaveSamples(ch, n) {
     for (let i=0; i<n; i++) out[i] = buf[Math.min(off2 + Math.floor(i/n*len), buf.length-1)] || 0;
     return out;
   }
-  if (ch.src==="mic") {
+  if (ch.src==="mic" || ch.src==="input") {
     const buf = getMicBuf(ch);
     if (!buf) return new Float32Array(n);
     const off2 = findTrigger(buf, G.trig);
@@ -445,6 +447,75 @@ function stopMic(ch) {
   try { ch.analyser?.disconnect(); } catch(e){}
   // the AudioContext is shared (the mixer owns it) → never close it here
   ch.stream=null; ch.micNode=null; ch.analyser=null; ch.micBuf=null; ch.micOk=false;
+}
+
+// ── Line input (audio interface): ONE stereo stream, split L→CH1, R→CH2 ───────
+const INPUT = {
+  stream:null, source:null, splitter:null, deviceId:null,
+  analyser:[null,null], buf:[null,null], tap:[null,null],
+};
+
+// open (or reopen) the chosen input device as a clean stereo line source
+async function startInput(deviceId) {
+  const ctx = ensureAudio();
+  if (ctx.state==="suspended") await ctx.resume();
+  stopInputStream();
+  const audio = { echoCancellation:false, noiseSuppression:false, autoGainControl:false, channelCount:2 };
+  if (deviceId) audio.deviceId = { exact: deviceId };
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({ audio }); }
+  catch(e) { console.warn("Input:", e.name, e.message); return false; }
+  INPUT.stream = stream;
+  INPUT.deviceId = deviceId || null;
+  INPUT.source = ctx.createMediaStreamSource(stream);
+  INPUT.splitter = ctx.createChannelSplitter(2);
+  INPUT.source.connect(INPUT.splitter);
+  for (let i=0;i<2;i++) {
+    const a = ctx.createAnalyser(); a.fftSize=2048; a.smoothingTimeConstant=0;
+    INPUT.splitter.connect(a, i);                 // scope tap (L=0 → CH1, R=1 → CH2)
+    INPUT.analyser[i] = a; INPUT.buf[i] = new Float32Array(2048);
+    const g = ctx.createGain(); INPUT.splitter.connect(g, i);  // mixer monitor tap
+    INPUT.tap[i] = g;
+  }
+  return true;
+}
+
+function stopInputStream() {
+  INPUT.stream?.getTracks().forEach(t=>t.stop());
+  try { INPUT.source?.disconnect(); } catch(e){}
+  try { INPUT.splitter?.disconnect(); } catch(e){}
+  INPUT.tap.forEach(g => { try { g?.disconnect(); } catch(e){} });
+  INPUT.stream=INPUT.source=INPUT.splitter=null;
+  INPUT.analyser=[null,null]; INPUT.buf=[null,null]; INPUT.tap=[null,null];
+}
+
+// detach one channel from the line input; stop the stream if nobody else needs it
+function detachInput(i) {
+  try { INPUT.tap[i]?.disconnect(AUDIO.chan[i].gain); } catch(e){}
+  CH[i].analyser=null; CH[i].micBuf=null;
+  const other = i===0?1:0;
+  if (CH[other].src!=="input") {
+    stopInputStream();
+    const card = document.getElementById("input-card");
+    if (card) card.style.display="none";
+  }
+}
+
+// fill the device dropdown (labels need a granted permission, so call after start)
+async function populateInputDevices() {
+  try {
+    const devs = await navigator.mediaDevices.enumerateDevices();
+    const sel = document.getElementById("input-device");
+    if (!sel) return;
+    sel.innerHTML = "";
+    devs.filter(d=>d.kind==="audioinput").forEach((d,idx)=>{
+      const o = document.createElement("option");
+      o.value = d.deviceId;
+      o.textContent = d.label || ("Ingresso "+(idx+1));
+      sel.appendChild(o);
+    });
+    if (INPUT.deviceId) sel.value = INPUT.deviceId;
+  } catch(e) { console.warn(e); }
 }
 
 // ── Draw → audio → XY ────────────────────────────────────────────────────────
@@ -618,24 +689,41 @@ function updateSrcUI(i, val) {
   document.getElementById("synth-ch"+i).style.display     = val==="synth"?"block":"none";
   document.getElementById("amp-row-ch"+i).style.display   = val==="synth"?"flex":"none";
   document.getElementById("pitch-row-ch"+i).style.display = val==="synth"?"flex":"none";
-  document.getElementById("gain-row-ch"+i).style.display  = val==="mic"?"flex":"none";
+  document.getElementById("gain-row-ch"+i).style.display  = (val==="mic"||val==="input")?"flex":"none";
 }
 
 async function setSrc(i, btn) {
   const ch = CH[i];
   const val = btn.dataset.v;
-  if (ch.src==="draw") stopDrawAudio();   // leaving a drawn shape → tear it down
   if (val===ch.src) return;
+  // tear down whatever this channel was using
+  if (ch.src==="draw")  stopDrawAudio();
+  if (ch.src==="mic")   stopMic(ch);
+  if (ch.src==="input") detachInput(i);
+
   if (val==="mic") {
     const ok = await startMic(ch);
     if (!ok) { alert("Microfono non disponibile o negato"); return; }
-    AUDIO.chan[i].mute = true;   // start the mic monitor muted → no Larsen surprise
+    ch.src = "mic";
+    AUDIO.chan[i].mute = true;            // monitor muted → no Larsen surprise
+  } else if (val==="input") {
+    if (!INPUT.stream) {
+      const ok = await startInput(INPUT.deviceId);
+      if (!ok) { alert("Ingresso audio non disponibile o negato"); return; }
+    }
+    await populateInputDevices();
+    const card = document.getElementById("input-card");
+    if (card) card.style.display = "";
+    ch.src = "input";
+    ch.analyser = INPUT.analyser[i];      // L → CH1, R → CH2
+    ch.micBuf = INPUT.buf[i];
+    AUDIO.chan[i].mute = true;            // monitor muted by default → no feedback
   } else {
-    stopMic(ch);
+    ch.src = "synth";
+    ch.analyser = null; ch.micBuf = null;
   }
-  ch.src = val;
   updateSrcUI(i, val);
-  routeChannel(i);              // wire the newly-selected source into the mixer
+  routeChannel(i);                        // wire the newly-selected source into the mixer
   applyChan(i);
   refreshMuteBtn("ch"+i);
 }
@@ -761,6 +849,19 @@ window.addEventListener("load", ()=>{
     if (AUDIO.noiseGain) AUDIO.noiseGain.gain.setTargetAtTime(parseFloat(e.target.value)*NOISE_AUDIO, AUDIO.ctx.currentTime, 0.02);
   });
   bindSlider("sl-dfreq", "v-dfreq", DRAW, "freq",  v=>v.toFixed(0)+"Hz");
+
+  // line-input device picker: switch interface and re-point the active channels
+  document.getElementById("input-device").addEventListener("change", async e=>{
+    const ok = await startInput(e.target.value);
+    if (!ok) return;
+    [0,1].forEach(i => {
+      if (CH[i].src==="input") {
+        CH[i].analyser = INPUT.analyser[i];
+        CH[i].micBuf = INPUT.buf[i];
+        routeChannel(i);
+      }
+    });
+  });
 
   // drawing input
   let sketching = false;
