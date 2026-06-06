@@ -1,6 +1,13 @@
 // ── Palette ────────────────────────────────────────────────────────────────
 const PALETTE = ["#39ff14","#00cfff","#ff6b35","#ffdd00","#ff3399","#aa44ff","#ffffff","#ff4444"];
 
+// average two #rrggbb colours → a single blended #rrggbb
+function blendHex(a, b) {
+  const ch = (h,i) => parseInt(h.slice(1+i*2, 3+i*2), 16);
+  const mix = i => Math.round((ch(a,i)+ch(b,i))/2).toString(16).padStart(2,"0");
+  return "#"+mix(0)+mix(1)+mix(2);
+}
+
 // ── Waveforms ──────────────────────────────────────────────────────────────
 const WF = {
   sine:     t => Math.sin(2*Math.PI*t),
@@ -297,7 +304,9 @@ function drawXY() {
   const marginY  = H/2-8;
 
   // color: blend or use whichever is active
-  const col = xCh ? xCh.color : yCh.color;
+  // the X-Y trace is a single curve, so it gets a single colour: blend both
+  // channels so changing either CANALE colour is reflected on screen
+  const col = (xCh && yCh) ? blendHex(xCh.color, yCh.color) : (xCh ? xCh.color : yCh.color);
 
   const pts = Array.from({length:n}, (_,i) => [
     W/2 + samplesX[i]*marginX,
@@ -502,8 +511,8 @@ async function drawConvert() {
 
 // ── Controls ───────────────────────────────────────────────────────────────
 function setMode(m) {
-  // a drawn shape only lives in XY/DRAW views; leaving them stops its audio
-  if (DRAW.playing && m !== "xy" && m !== "draw") stopDrawAudio();
+  // a drawn shape now survives every view: X-Y shows the figure, ONDA shows its
+  // two source waves X(t)/Y(t). It's torn down only by PULISCI or a source change.
   G.mode = m;
   if (m !== "draw") DRAW.active = false;
   ["wave","xy","draw"].forEach(id => {
