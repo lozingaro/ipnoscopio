@@ -29,23 +29,6 @@ function findTrigger(buf, level, hyst=0.02) {
 // ── Draw-mode geometry pipeline ──────────────────────────────────────────────
 const clamp1 = v => v < -1 ? -1 : v > 1 ? 1 : v;
 
-// nearest-neighbour traversal → continuous path
-function sortPoints(pts) {
-  if (pts.length < 2) return pts.slice();
-  const rest = pts.slice();
-  const path = [rest.shift()];
-  while (rest.length) {
-    const last = path[path.length-1];
-    let bi = 0, bd = Infinity;
-    for (let i=0; i<rest.length; i++) {
-      const dx = rest[i].x-last.x, dy = rest[i].y-last.y, d = dx*dx+dy*dy;
-      if (d < bd) { bd = d; bi = i; }
-    }
-    path.push(rest.splice(bi,1)[0]);
-  }
-  return path;
-}
-
 // equidistant resampling along a CLOSED path → M points (seamless loop)
 function resamplePath(pts, M) {
   const p = pts.slice(); p.push(p[0]);          // close the loop
@@ -117,7 +100,6 @@ const DRAW = {
 const AUDIO = {
   ctx:null, master:null,
   masterVol:0.7, masterMute:false,
-  noiseGain:null,                   // global white-noise level → master
   chan:[
     { vol:0.6, mute:true, gain:null, osc:null },   // muted by default → silent start
     { vol:0.6, mute:true, gain:null, osc:null },
@@ -127,9 +109,6 @@ const AUDIO = {
 // Waveform names already match OscillatorNode.type values 1:1.
 const oscType = wf => wf;
 
-// RUMORE slider (0..1) → white-noise gain into the master (kept modest)
-const NOISE_AUDIO = 0.25;
-
 // Create the shared context + graph on first use (must run inside a user gesture).
 function ensureAudio() {
   if (AUDIO.ctx) { if (AUDIO.ctx.state==="suspended") AUDIO.ctx.resume(); return AUDIO.ctx; }
@@ -138,15 +117,6 @@ function ensureAudio() {
   AUDIO.master = ctx.createGain();
   AUDIO.master.gain.value = AUDIO.masterMute ? 0 : AUDIO.masterVol;
   AUDIO.master.connect(ctx.destination);
-  // global white noise: a looping random buffer → its own gain → master
-  const nbuf = ctx.createBuffer(1, ctx.sampleRate*2, ctx.sampleRate);
-  const nd = nbuf.getChannelData(0);
-  for (let i=0;i<nd.length;i++) nd[i] = Math.random()*2-1;
-  const nsrc = ctx.createBufferSource(); nsrc.buffer = nbuf; nsrc.loop = true;
-  AUDIO.noiseGain = ctx.createGain();
-  AUDIO.noiseGain.gain.value = G.noise*NOISE_AUDIO;
-  nsrc.connect(AUDIO.noiseGain); AUDIO.noiseGain.connect(AUDIO.master);
-  nsrc.start();
   AUDIO.chan.forEach((c,i) => {
     c.gain = ctx.createGain();
     c.gain.gain.value = 0;            // applyChan sets the real value below
@@ -288,13 +258,13 @@ function getWaveSamples(ch, n) {
   if (ch.src==="mic" || ch.src==="input") {
     const buf = getMicBuf(ch);
     if (!buf) return new Float32Array(n);
-    const off2 = findTrigger(buf, G.trig);
-    const win  = Math.min(Math.floor(1024*G.timebase), buf.length-off2);
-    const out  = new Float32Array(n);
-    for (let i=0;i<n;i++) {
-      const idx = off2+Math.floor(i/n*win);
-      out[i] = (buf[Math.min(idx,buf.length-1)]||0)*ch.gain;
-    }
+    const win = Math.min(Math.floor(1024*G.timebase), buf.length);
+    // X-Y: read the NEWEST window (no trigger) so X and Y stay time-aligned and
+    // the figure tracks the live signal with minimal lag. ONDA: trigger to hold still.
+    let start = (G.mode==="xy") ? (buf.length - win) : findTrigger(buf, G.trig);
+    start = Math.max(0, Math.min(start, buf.length - win));
+    const out = new Float32Array(n);
+    for (let i=0;i<n;i++) out[i] = (buf[start + Math.floor(i/n*win)]||0)*ch.gain;
     return out;
   } else {
     const out = new Float32Array(n);
@@ -321,8 +291,7 @@ function drawWave() {
     if (!ch.enabled) return;
     const samples = getWaveSamples(ch, n);
     const pts = Array.from({length:n}, (_,i) => {
-      const noise = (Math.random()-.5)*G.noise*0.3;   // visual grain echoes the audible noise
-      const y = (samples[i]+noise);
+      const y = samples[i];
       return [(i/(n-1))*W, H/2 - y*margin + ch.yOff*(H/8)];
     });
     strokePts(offCtx, pts, ch.color+"33", 0, 5);
@@ -597,8 +566,10 @@ async function drawConvert() {
   const cxp=(minX+maxX)/2, cyp=(minY+maxY)/2;
   const half = Math.max((maxX-minX)/2, (maxY-minY)/2) || 1;
   const k = 0.95/half;
+  // KEEP the drawing order: the stroke is already a continuous path, so we trace
+  // it as drawn. (Nearest-neighbour re-sorting used to scramble shapes like a
+  // heart — jumping across the dip/lobes — wrecking the reproduction.)
   P = P.map(p => ({ x:(p.x-cxp)*k, y:-(p.y-cyp)*k }));
-  P = sortPoints(P);
 
   const actx = ensureAudio();
   if (actx.state==="suspended") await actx.resume();
@@ -841,12 +812,6 @@ window.addEventListener("load", ()=>{
   new ResizeObserver(initCanvas).observe(canvas);
 
   // sliders global
-  bindSlider("sl-noise", "v-noise", G, "noise", v=>v.toFixed(2));
-  // RUMORE drives a real white-noise voice in the audio, not just the visual grain
-  document.getElementById("sl-noise").addEventListener("input", e=>{
-    ensureAudio();
-    if (AUDIO.noiseGain) AUDIO.noiseGain.gain.setTargetAtTime(parseFloat(e.target.value)*NOISE_AUDIO, AUDIO.ctx.currentTime, 0.02);
-  });
   bindSlider("sl-dfreq", "v-dfreq", DRAW, "freq",  v=>v.toFixed(0)+"Hz");
 
   // line-input device picker: switch interface and re-point the active channels
