@@ -506,18 +506,18 @@ function setPart(i,j,key,val) {
   CH[i].partials[j][key] = parseFloat(val);
   const el = document.getElementById(`vp-${i}-${j}-${key}`);
   if (el) el.textContent = parseFloat(val).toFixed(2);
-  updatePartialAudio(i);
+  updatePartialAudio(i); highlightPreset(null);
 }
 
 function addPartial(i) {
   if (CH[i].partials.length >= MAXPARTIALS) return;
   CH[i].partials.push({ ratio:CH[i].partials.length+1, amp:0.5, phase:0 });
-  buildChannelSynth(i); renderPartials(i);
+  buildChannelSynth(i); renderPartials(i); highlightPreset(null);
 }
 
 function removePartial(i,j) {
   CH[i].partials.splice(j,1);
-  buildChannelSynth(i); renderPartials(i);
+  buildChannelSynth(i); renderPartials(i); highlightPreset(null);
 }
 
 // quick-start figures (just configure pitches + partials of the two channels)
@@ -538,6 +538,13 @@ function applyPreset(name) {
     if (sl) sl.value=pitch; if (vv) vv.textContent=pitch.toFixed(0)+"Hz";
     buildChannelSynth(i); renderPartials(i);
   });
+  highlightPreset(name);          // light up the chosen preset button
+}
+
+// mark one preset button active (or clear all when the user edits by hand)
+function highlightPreset(name) {
+  document.querySelectorAll("#preset-seg button").forEach(b =>
+    b.classList.toggle("active", b.dataset.preset===name));
 }
 
 // sync the toggle button, card opacity and LED to ch.enabled
@@ -756,6 +763,7 @@ window.addEventListener("load", ()=>{
       const p = parseFloat(e.target.value);
       ch.freq = visCycles(p);
       updatePartialAudio(i);            // repitch every partial of the bank
+      highlightPreset(null);
     });
 
     // swatches
