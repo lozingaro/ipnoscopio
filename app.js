@@ -205,7 +205,7 @@ function refreshMuteBtn(key) {
   const muted = key==="master" ? AUDIO.masterMute : AUDIO.chan[+key.slice(2)].mute;
   const btn = document.getElementById("mute-"+key);
   if (!btn) return;
-  btn.textContent = muted ? "MUTO" : "SUONA";
+  btn.textContent = muted ? "ZITTO" : "SUONA";
   btn.classList.toggle("muted", muted);
 }
 
@@ -647,7 +647,6 @@ function setMode(m) {
     btn.style.boxShadow = m===id?"inset 0 -2px 0 #39ff14":"none";
   });
   const label = { wave:"ONDA", xy:"X-Y", draw:"DISEGNA" }[m] || m.toUpperCase();
-  document.getElementById("mode-label").textContent = label;
   document.getElementById("screen-label").textContent = label;
   // axis pickers only matter in X-Y; SU-GIU' (vertical offset) only in ONDA/DISEGNA
   [0,1].forEach(i => {
@@ -809,7 +808,7 @@ function bindSlider(id, valId, obj, key, fmt) {
 function toggleRun() {
   G.running = !G.running;
   const btn = document.getElementById("btn-run");
-  btn.textContent = G.running?"STOP":"RUN";
+  btn.textContent = G.running?"FERMA":"VAI";
   btn.classList.toggle("stopped", !G.running);
   const led = document.getElementById("led-run");
   led.style.background = G.running?"#39ff14":"#333";
@@ -821,7 +820,7 @@ function toggleRun() {
 function toggleFullscreen() {
   const el = document.getElementById("screen-wrap");
   const on = el.classList.toggle("fs");
-  document.getElementById("btn-fs").textContent = on ? "ESCI" : "TUTTO SCHERMO";
+  document.getElementById("btn-fs").textContent = on ? "BASTA" : "GIGANTE";
   // try the native API too (nice on Android/desktop; harmless where unsupported)
   try {
     if (on && el.requestFullscreen) el.requestFullscreen().catch(()=>{});
