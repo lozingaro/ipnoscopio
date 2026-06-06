@@ -48,11 +48,11 @@
       le card canale). Lissajous = 1 oscillatore per canale a frequenze diverse;
       spirografo = oscillatori abbinati in quadratura. Parti da un preset e gioca.
     </p>
-    <div class="seg" style="margin-top:0">
-      <button onclick="applyPreset('lissajous')">LISSAJOUS</button>
-      <button onclick="applyPreset('cerchio')">CERCHIO</button>
-      <button onclick="applyPreset('spiro')">SPIRO</button>
-      <button onclick="applyPreset('reset')">RESET</button>
+    <div class="seg" id="preset-seg" style="margin-top:0">
+      <button data-preset="lissajous" onclick="applyPreset('lissajous')">LISSAJOUS</button>
+      <button data-preset="cerchio" onclick="applyPreset('cerchio')">CERCHIO</button>
+      <button data-preset="spiro" onclick="applyPreset('spiro')">SPIRO</button>
+      <button data-preset="reset" onclick="applyPreset('reset')">RESET</button>
     </div>
 
     <span class="sl" style="font-size:9px;letter-spacing:1px;color:#444;display:block;margin-top:8px">MODULA (movimento &amp; ritmo)</span>
