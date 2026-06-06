@@ -648,8 +648,10 @@ const CH = [
 const DRAW = {
   active:false,     // sketching on the screen right now
   playing:false,    // a drawn shape is looping as audio
-  points:[],        // raw {x,y} in device pixels
+  strokes:[],       // array of strokes, each an array of {x,y} device px
   freq:55,          // loop frequency (Hz) → buffer length = sampleRate / freq
+  N:0,              // samples per loop period (one cycle) for stable rendering
+  saved:null,       // channel state to restore when draw playback ends
   actx:null, src:null, splitter:null, merger:null, gain:null,
   analyserX:null, analyserY:null,
 };
@@ -703,8 +705,11 @@ function getWaveSamples(ch, n) {
   if (ch.src==="draw") {
     const buf = getMicBuf(ch);
     if (!buf) return new Float32Array(n);
+    // map over exactly one loop period (N) — the shape is closed, so any phase
+    // start traces the same curve → stable, flicker-free, no overlaid copies
+    const len = Math.min(DRAW.N || buf.length, buf.length);
     const out = new Float32Array(n);
-    for (let i=0; i<n; i++) out[i] = buf[Math.floor(i/n*buf.length)] || 0;
+    for (let i=0; i<n; i++) out[i] = buf[Math.floor(i/n*len)] || 0;
     return out;
   }
   if (ch.src==="mic") {
@@ -814,17 +819,19 @@ function drawXY() {
 }
 
 function drawSketch() {
-  const pts = DRAW.points;
-  if (pts.length < 1) {
+  const total = DRAW.strokes.reduce((s,st)=>s+st.length, 0);
+  if (total < 1) {
     // crosshair hint on empty canvas
     offCtx.strokeStyle="rgba(57,255,20,0.25)"; offCtx.lineWidth=1;
     offCtx.beginPath(); offCtx.moveTo(W/2,H/2-12); offCtx.lineTo(W/2,H/2+12);
     offCtx.moveTo(W/2-12,H/2); offCtx.lineTo(W/2+12,H/2); offCtx.stroke();
     return;
   }
-  const path = pts.map(p => [p.x, p.y]);
-  strokePts(offCtx, path, "#39ff1433", 0, 5);
-  strokePts(offCtx, path, "#39ff14", 8, 2);
+  DRAW.strokes.forEach(st => {
+    const path = st.map(p => [p.x, p.y]);
+    strokePts(offCtx, path, "#39ff1433", 0, 5);
+    strokePts(offCtx, path, "#39ff14", 8, 2);
+  });
 }
 
 // ── Render loop ────────────────────────────────────────────────────────────
@@ -896,14 +903,14 @@ function stopMic(ch) {
 // ── Draw → audio → XY ────────────────────────────────────────────────────────
 function startSketch() {
   stopDrawAudio();
-  DRAW.points = [];
+  DRAW.strokes = [];
   DRAW.active = true;
   clearScreen();
 }
 
 function resetDraw() {
   stopDrawAudio();
-  DRAW.points = [];
+  DRAW.strokes = [];
   DRAW.active = true;
   clearScreen();
 }
@@ -919,17 +926,17 @@ function configureDrawChannel(i, analyser, axis) {
   ch.enabled = true;
   updateSrcUI(i, "draw");
   setAxisUI(i, axis);
-  const btn = document.getElementById("toggle-ch"+i);
-  btn.textContent = "ON";
-  btn.style.background = ch.color; btn.style.color = "#000"; btn.style.borderColor = ch.color;
-  document.getElementById("card-ch"+i).style.opacity = "1";
-  updateLED(i);
+  refreshChannelEnabled(i);
 }
 
 function restoreChannelSynth(i) {
   const ch = CH[i];
   ch.src = "synth"; ch.analyser = null; ch.micBuf = null;
+  // restore the channel state we overrode when the drawn signal took over
+  if (DRAW.saved && DRAW.saved[i]) { ch.enabled = DRAW.saved[i].enabled; ch.axis = DRAW.saved[i].axis; }
   updateSrcUI(i, "synth");
+  setAxisUI(i, ch.axis);
+  refreshChannelEnabled(i);
 }
 
 function stopDrawAudio() {
@@ -939,22 +946,25 @@ function stopDrawAudio() {
   DRAW.analyserX = DRAW.analyserY = null;
   DRAW.playing = false;
   [0,1].forEach(i => { if (CH[i].src==="draw") restoreChannelSynth(i); });
+  DRAW.saved = null;
 }
 
 // the full pipeline: sketch → sorted path → resample → spline → stereo loop → XY
 function drawConvert() {
-  if (DRAW.points.length < 4) { alert("Disegna prima una forma!"); return; }
+  const P0 = DRAW.strokes.flat();
+  if (P0.length < 4) { alert("Disegna prima una forma!"); return; }
   stopDrawAudio();
 
   // normalise to -1..1 preserving aspect ratio (centre of screen = origin)
   const s = 2/Math.max(W,H);
-  let P = DRAW.points.map(p => ({ x:(p.x-W/2)*s, y:-(p.y-H/2)*s }));
+  let P = P0.map(p => ({ x:(p.x-W/2)*s, y:-(p.y-H/2)*s }));
   P = sortPoints(P);
 
   const actx = new (window.AudioContext||window.webkitAudioContext)();
   if (actx.state==="suspended") actx.resume();
 
   const N = Math.max(64, Math.round(actx.sampleRate / DRAW.freq));
+  DRAW.N = N;
   const M = Math.min(256, Math.max(8, P.length));
   const smooth = catmullRom(resamplePath(P, M), N);
 
@@ -978,6 +988,8 @@ function drawConvert() {
   src.start();
 
   Object.assign(DRAW, { actx, src, splitter, merger, gain, analyserX:aX, analyserY:aY, playing:true });
+  // remember channel state so we can restore it when playback ends
+  DRAW.saved = [0,1].map(i => ({ enabled:CH[i].enabled, axis:CH[i].axis }));
   configureDrawChannel(0, aX, "x");
   configureDrawChannel(1, aY, "y");
   setMode("xy");
@@ -985,6 +997,8 @@ function drawConvert() {
 
 // ── Controls ───────────────────────────────────────────────────────────────
 function setMode(m) {
+  // a drawn shape only lives in XY/DRAW views; leaving them stops its audio
+  if (DRAW.playing && m !== "xy" && m !== "draw") stopDrawAudio();
   G.mode = m;
   if (m !== "draw") DRAW.active = false;
   ["wave","dot","xy","draw"].forEach(id => {
@@ -1004,16 +1018,21 @@ function setMode(m) {
   else clearScreen();
 }
 
-function toggleCh(i) {
+// sync the toggle button, card opacity and LED to ch.enabled
+function refreshChannelEnabled(i) {
   const ch = CH[i];
-  ch.enabled = !ch.enabled;
   const btn = document.getElementById("toggle-ch"+i);
   btn.textContent = ch.enabled?"ON":"OFF";
-  btn.style.background = ch.enabled ? ch.color : "transparent";
+  btn.style.background  = ch.enabled ? ch.color : "transparent";
   btn.style.color       = ch.enabled ? "#000"   : "#555";
   btn.style.borderColor = ch.enabled ? ch.color  : "#333";
   document.getElementById("card-ch"+i).style.opacity = ch.enabled?"1":"0.4";
   updateLED(i);
+}
+
+function toggleCh(i) {
+  CH[i].enabled = !CH[i].enabled;
+  refreshChannelEnabled(i);
 }
 
 function updateSrcUI(i, val) {
@@ -1131,7 +1150,7 @@ function toggleRun() {
 }
 
 function clearScreen() {
-  if (DRAW.active) DRAW.points = [];
+  if (DRAW.active) DRAW.strokes = [];
   if (offCtx){offCtx.fillStyle="#000";offCtx.fillRect(0,0,W,H);}
 }
 
@@ -1150,15 +1169,18 @@ window.addEventListener("load", ()=>{
   let sketching = false;
   const sketchPoint = e => {
     if (G.mode!=="draw" || !DRAW.active) return;
+    const stroke = DRAW.strokes[DRAW.strokes.length-1];
+    if (!stroke) return;
     const rect = canvas.getBoundingClientRect();
     const x = (e.clientX-rect.left)/rect.width*W;
     const y = (e.clientY-rect.top)/rect.height*H;
-    const last = DRAW.points[DRAW.points.length-1];
-    if (!last || Math.hypot(x-last.x, y-last.y) > Math.max(2, W*0.004)) DRAW.points.push({x,y});
+    const last = stroke[stroke.length-1];
+    if (!last || Math.hypot(x-last.x, y-last.y) > Math.max(2, W*0.004)) stroke.push({x,y});
   };
   canvas.addEventListener("pointerdown", e=>{
     if (G.mode!=="draw") return;
-    sketching = true; DRAW.points = [];
+    sketching = true;
+    DRAW.strokes.push([]);          // start a new stroke (multi-stroke shapes)
     canvas.setPointerCapture?.(e.pointerId);
     sketchPoint(e); e.preventDefault();
   });
