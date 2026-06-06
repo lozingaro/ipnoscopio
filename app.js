@@ -319,6 +319,30 @@ function drawXY() {
   }
 }
 
+// generative engine → X-Y figure (its own analysers, channel colours)
+function drawGen() {
+  if (!GEN.on || !GEN.analyser[0]) return;
+  GEN.analyser[0].getFloatTimeDomainData(GEN.buf[0]);
+  GEN.analyser[1].getFloatTimeDomainData(GEN.buf[1]);
+  const bx = GEN.buf[0], by = GEN.buf[1], Ln = bx.length;
+  const n = Math.min(W*2, 1440), marginX = W/2-8, marginY = H/2-8;
+  const pts = Array.from({length:n}, (_,i) => {
+    const idx = Math.floor(i/n*Ln);
+    return [W/2 + (bx[idx]||0)*marginX, H/2 - (by[idx]||0)*marginY];
+  });
+  const grad = offCtx.createLinearGradient(0,0,W,H);
+  grad.addColorStop(0, CH[0].color); grad.addColorStop(1, CH[1].color);
+  const glow = blendHex(CH[0].color, CH[1].color);
+  const trace = lw => {
+    offCtx.beginPath();
+    pts.forEach(([x,y],i)=> i?offCtx.lineTo(x,y):offCtx.moveTo(x,y));
+    offCtx.lineWidth = lw; offCtx.stroke();
+  };
+  offCtx.shadowBlur = 0; offCtx.strokeStyle = glow+"33"; trace(4);
+  offCtx.shadowBlur = 8; offCtx.shadowColor = glow; offCtx.strokeStyle = grad; trace(1.5);
+  offCtx.shadowBlur = 0;
+}
+
 function drawSketch() {
   const total = DRAW.strokes.reduce((s,st)=>s+st.length, 0);
   if (total < 1) {
@@ -350,8 +374,9 @@ function loop(ts) {
     drawSketch();
   } else {
     offCtx.fillStyle="rgba(0,0,0,0.2)"; offCtx.fillRect(0,0,W,H);
-    if (G.mode==="wave")    drawWave();
-    else if (G.mode==="xy") drawXY();
+    if (G.mode==="wave")        drawWave();
+    else if (G.mode==="xy")     drawXY();
+    else if (G.mode==="genera") drawGen();
   }
 
   ctx.fillStyle="#000"; ctx.fillRect(0,0,W,H);
@@ -466,6 +491,80 @@ async function populateInputDevices() {
     });
     if (INPUT.deviceId) sel.value = INPUT.deviceId;
   } catch(e) { console.warn(e); }
+}
+
+// ── Generative engine (Lissajous + harmonics) ────────────────────────────────
+// Two sine oscillators per axis (fundamental + 3rd harmonic), summed; a DelayNode
+// on Y sets the X↔Y phase (rotates/opens the figure). Output is true stereo
+// (L = X, R = Y). A few knobs → a huge space of hypnotic figures.
+const GEN = {
+  on:false,
+  base:110, ratio:2, harm:0, phase:0.25,    // FREQUENZA · RAPPORTO · ARMONICA · FASE
+  master:null, delayY:null,
+  oscX1:null, oscX2:null, oscY1:null, oscY2:null, gHarmX:null, gHarmY:null,
+  analyser:[null,null], buf:[null,null],
+};
+const GEN_HARM = 3;          // which harmonic the ARMONICA knob adds
+const GEN_FUND = 0.6;        // fundamental level (leaves headroom for the harmonic)
+const GEN_HMAX = 0.4;        // max harmonic level → fundamental+harmonic ≤ 1
+
+function startGen() {
+  if (GEN.on) return;
+  const ctx = ensureAudio();
+  if (ctx.state==="suspended") ctx.resume();
+  const fX = GEN.base, fY = GEN.base*GEN.ratio;
+
+  const busX = ctx.createGain(), busY = ctx.createGain();
+
+  GEN.oscX1 = ctx.createOscillator(); GEN.oscX1.type="sine"; GEN.oscX1.frequency.value=fX;
+  const gX1 = ctx.createGain(); gX1.gain.value=GEN_FUND; GEN.oscX1.connect(gX1).connect(busX);
+  GEN.oscX2 = ctx.createOscillator(); GEN.oscX2.type="sine"; GEN.oscX2.frequency.value=fX*GEN_HARM;
+  GEN.gHarmX = ctx.createGain(); GEN.gHarmX.gain.value=GEN.harm*GEN_HMAX; GEN.oscX2.connect(GEN.gHarmX).connect(busX);
+
+  GEN.oscY1 = ctx.createOscillator(); GEN.oscY1.type="sine"; GEN.oscY1.frequency.value=fY;
+  const gY1 = ctx.createGain(); gY1.gain.value=GEN_FUND; GEN.oscY1.connect(gY1).connect(busY);
+  GEN.oscY2 = ctx.createOscillator(); GEN.oscY2.type="sine"; GEN.oscY2.frequency.value=fY*GEN_HARM;
+  GEN.gHarmY = ctx.createGain(); GEN.gHarmY.gain.value=GEN.harm*GEN_HMAX; GEN.oscY2.connect(GEN.gHarmY).connect(busY);
+
+  // FASE: delay Y by a fraction of its period (rotates the Lissajous)
+  GEN.delayY = ctx.createDelay(1); GEN.delayY.delayTime.value = GEN.phase/Math.max(1,fY);
+  busY.connect(GEN.delayY);
+
+  // scope taps
+  const aX = ctx.createAnalyser(); aX.fftSize=2048; aX.smoothingTimeConstant=0;
+  const aY = ctx.createAnalyser(); aY.fftSize=2048; aY.smoothingTimeConstant=0;
+  busX.connect(aX); GEN.delayY.connect(aY);
+  GEN.analyser=[aX,aY]; GEN.buf=[new Float32Array(2048), new Float32Array(2048)];
+
+  // stereo audio out (L=X, R=Y) → master mixer
+  GEN.master = ctx.createGain(); GEN.master.gain.value=0.5;
+  const merger = ctx.createChannelMerger(2);
+  busX.connect(merger,0,0); GEN.delayY.connect(merger,0,1);
+  merger.connect(GEN.master); GEN.master.connect(AUDIO.master);
+
+  [GEN.oscX1,GEN.oscX2,GEN.oscY1,GEN.oscY2].forEach(o=>o.start());
+  GEN.on = true;
+}
+
+function updateGen() {
+  if (!GEN.on || !AUDIO.ctx) return;
+  const t = AUDIO.ctx.currentTime;
+  const fX = GEN.base, fY = GEN.base*GEN.ratio;
+  GEN.oscX1.frequency.setTargetAtTime(fX, t, 0.02);
+  GEN.oscX2.frequency.setTargetAtTime(fX*GEN_HARM, t, 0.02);
+  GEN.oscY1.frequency.setTargetAtTime(fY, t, 0.02);
+  GEN.oscY2.frequency.setTargetAtTime(fY*GEN_HARM, t, 0.02);
+  GEN.gHarmX.gain.setTargetAtTime(GEN.harm*GEN_HMAX, t, 0.02);
+  GEN.gHarmY.gain.setTargetAtTime(GEN.harm*GEN_HMAX, t, 0.02);
+  GEN.delayY.delayTime.setTargetAtTime(GEN.phase/Math.max(1,fY), t, 0.02);
+}
+
+function stopGen() {
+  if (!GEN.on) return;
+  [GEN.oscX1,GEN.oscX2,GEN.oscY1,GEN.oscY2].forEach(o=>{ try{o.stop();}catch(e){} try{o.disconnect();}catch(e){} });
+  try { GEN.delayY.disconnect(); } catch(e){}
+  try { GEN.master.disconnect(); } catch(e){}
+  GEN.on = false;
 }
 
 // ── Draw → audio → XY ────────────────────────────────────────────────────────
@@ -590,22 +689,28 @@ async function drawConvert() {
 function setMode(m) {
   // a drawn shape now survives every view: X-Y shows the figure, ONDA shows its
   // two source waves X(t)/Y(t). It's torn down only by PULISCI or a source change.
+  // GENERA runs its own oscillator engine while its tab is active.
+  if (G.mode==="genera" && m!=="genera") stopGen();
   G.mode = m;
   if (m !== "draw") DRAW.active = false;
-  ["wave","xy","draw"].forEach(id => {
+  ["wave","xy","draw","genera"].forEach(id => {
     const btn = document.getElementById("tab-"+id);
     btn.className = m===id?"active":"";
     btn.style.color = m===id?"#39ff14":"#555";
     btn.style.boxShadow = m===id?"inset 0 -2px 0 #39ff14":"none";
   });
-  const label = { wave:"ONDA", xy:"X-Y", draw:"DISEGNA" }[m] || m.toUpperCase();
+  const label = { wave:"ONDA", xy:"X-Y", draw:"DISEGNA", genera:"GENERA" }[m] || m.toUpperCase();
   document.getElementById("screen-label").textContent = label;
   // axis pickers only matter in X-Y; SU-GIU' (vertical offset) only in ONDA/DISEGNA
   [0,1].forEach(i => {
     document.getElementById("axis-row-ch"+i).style.display = m==="xy"?"block":"none";
     document.getElementById("yoff-row-ch"+i).style.display = m==="xy"?"none":"flex";
+    // GENERA has its own engine → hide the per-channel cards to keep focus
+    document.getElementById("card-ch"+i).style.display = m==="genera"?"none":"";
   });
   document.getElementById("draw-card").style.display = m==="draw"?"":"none";
+  document.getElementById("genera-card").style.display = m==="genera"?"":"none";
+  if (m === "genera") startGen();
   if (m === "draw") startSketch();
   else clearScreen();
 }
@@ -797,6 +902,14 @@ window.addEventListener("load", ()=>{
 
   // sliders global
   bindSlider("sl-dfreq", "v-dfreq", DRAW, "freq",  v=>v.toFixed(0)+"Hz");
+
+  // generative engine knobs
+  bindSlider("sl-gbase",  "v-gbase",  GEN, "base",  v=>v.toFixed(0)+"Hz");
+  bindSlider("sl-gratio", "v-gratio", GEN, "ratio", v=>v.toFixed(2));
+  bindSlider("sl-gharm",  "v-gharm",  GEN, "harm",  v=>v.toFixed(2));
+  bindSlider("sl-gphase", "v-gphase", GEN, "phase", v=>v.toFixed(2));
+  ["sl-gbase","sl-gratio","sl-gharm","sl-gphase"].forEach(id =>
+    document.getElementById(id).addEventListener("input", updateGen));
 
   // line-input device picker: switch interface and re-point the active channels
   document.getElementById("input-device").addEventListener("change", async e=>{
