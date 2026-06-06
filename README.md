@@ -1,4 +1,4 @@
-# DIDASCOPE
+# Oscilloscopio della Gleba
 
 Analog oscilloscope simulator — single-file HTML/JS, zero dependencies.
 
@@ -13,6 +13,7 @@ Analog oscilloscope simulator — single-file HTML/JS, zero dependencies.
   - `WAVE` — time domain
   - `DOT` — single moving point
   - `XY` — Lissajous (channel X vs channel Y)
+  - `DRAW` — sketch a shape, turn it into a looping stereo signal (L=X, R=Y) and watch it traced in XY
 - Global timebase, noise and trigger-level controls
 - Phosphor CRT afterglow, scanlines and vignette
 - Dr. Pira / *Fumetti della Gleba* comic-strip visual style
@@ -24,7 +25,6 @@ Just open `index.html` in any browser. Microphone input requires HTTPS (or `loca
 
 ## Roadmap
 
-- **DRAW mode** — draw on the canvas, convert the path to a stereo (L=X, R=Y) audio loop, render it in XY
 - SVG upload → XY audio
 - XY audio effects (rotation, scale, wobble LFO)
 - Image upload → edge detection → XY audio
