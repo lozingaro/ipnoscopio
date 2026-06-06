@@ -31,10 +31,15 @@ const G = { timebase:1, noise:0, trig:0, mode:"wave", running:true };
 
 const CH = [
   { enabled:true, src:"synth", waveform:"sine", freq:2, pitch:220, amp:0.75, gain:2, yOff:0, color:"#39ff14", axis:"x",
+    partials:[{ratio:1, amp:1, phase:0}],
     stream:null, micNode:null, analyser:null, micBuf:null, micOk:false },
   { enabled:true, src:"synth", waveform:"sine", freq:3, pitch:330, amp:0.75, gain:2, yOff:0, color:"#00cfff", axis:"y",
+    partials:[{ratio:1, amp:1, phase:0}],
     stream:null, micNode:null, analyser:null, micBuf:null, micOk:false },
 ];
+const MAXPARTIALS = 4;
+// keep the additive sum bounded to -1..1 regardless of how many partials are on
+const partNorm = ch => 1/Math.max(1, ch.partials.reduce((s,p)=>s+p.amp,0));
 
 // ── Mixer / shared audio graph ───────────────────────────────────────────────
 // One AudioContext for everyone. The mixer is PER CHANNEL: whatever source a
@@ -50,8 +55,8 @@ const AUDIO = {
   ctx:null, master:null,
   masterVol:0.7, masterMute:false,
   chan:[
-    { vol:0.6, mute:true, gain:null, osc:null },   // muted by default → silent start
-    { vol:0.6, mute:true, gain:null, osc:null },
+    { vol:0.6, mute:true, gain:null, synthSum:null, parts:[] },   // muted by default → silent start
+    { vol:0.6, mute:true, gain:null, synthSum:null, parts:[] },
   ],
 };
 
@@ -70,17 +75,49 @@ function ensureAudio() {
     c.gain = ctx.createGain();
     c.gain.gain.value = 0;            // applyChan sets the real value below
     c.gain.connect(AUDIO.master);
-    // a continuously-running oscillator backs the "synth" source
-    const osc = ctx.createOscillator();
-    osc.type = oscType(CH[i].waveform);
-    osc.frequency.value = CH[i].pitch;
-    osc.start();
-    c.osc = osc;
+    // the "synth" source is an additive bank of oscillators summing into synthSum
+    c.synthSum = ctx.createGain();
+    c.synthSum.gain.value = 1;
+    buildChannelSynth(i);            // create one oscillator per partial
     routeChannel(i);                 // wire the channel's current source in
     applyChan(i);
   });
   if (ctx.state==="suspended") ctx.resume();
   return ctx;
+}
+
+// (re)build the additive oscillator bank for a synth channel from CH[i].partials.
+// Each partial: osc (waveform) → delay (phase) → gain (amp) → synthSum.
+function buildChannelSynth(i) {
+  const ctx = AUDIO.ctx, c = AUDIO.chan[i], ch = CH[i];
+  if (!ctx || !c.synthSum) return;
+  c.parts.forEach(pt => { try{pt.osc.stop();}catch(e){} try{pt.osc.disconnect();}catch(e){}
+                          try{pt.delay.disconnect();}catch(e){} try{pt.gain.disconnect();}catch(e){} });
+  c.parts = [];
+  const norm = partNorm(ch);
+  ch.partials.forEach(p => {
+    const f = ch.pitch * p.ratio;
+    const osc = ctx.createOscillator(); osc.type = oscType(ch.waveform); osc.frequency.value = f;
+    const delay = ctx.createDelay(1);   delay.delayTime.value = p.phase/Math.max(1,f);
+    const gain = ctx.createGain();      gain.gain.value = p.amp*norm;
+    osc.connect(delay).connect(gain).connect(c.synthSum);
+    osc.start();
+    c.parts.push({ osc, delay, gain });
+  });
+}
+
+// live-update one partial's audio params (no rebuild → no clicks)
+function updatePartialAudio(i) {
+  const ctx = AUDIO.ctx, c = AUDIO.chan[i], ch = CH[i];
+  if (!ctx) return;
+  if (c.parts.length !== ch.partials.length) { buildChannelSynth(i); return; }
+  const t = ctx.currentTime, norm = partNorm(ch);
+  ch.partials.forEach((p,j) => {
+    const pt = c.parts[j], f = ch.pitch*p.ratio;
+    pt.osc.frequency.setTargetAtTime(f, t, 0.02);
+    pt.delay.delayTime.setTargetAtTime(p.phase/Math.max(1,f), t, 0.02);
+    pt.gain.gain.setTargetAtTime(p.amp*norm, t, 0.02);
+  });
 }
 
 // Connect the node matching the channel's current source to its mixer gain,
@@ -89,10 +126,10 @@ function routeChannel(i) {
   const c = AUDIO.chan[i];
   if (!c || !c.gain) return;
   const cg = c.gain;
-  try { c.osc?.disconnect(cg); }         catch(e){}
+  try { c.synthSum?.disconnect(cg); }    catch(e){}
   try { CH[i].micNode?.disconnect(cg); } catch(e){}
   try { INPUT.tap[i]?.disconnect(cg); }  catch(e){}
-  if      (CH[i].src === "synth") c.osc?.connect(cg);
+  if      (CH[i].src === "synth") c.synthSum?.connect(cg);
   else if (CH[i].src === "mic")   CH[i].micNode?.connect(cg);
   else if (CH[i].src === "input") INPUT.tap[i]?.connect(cg);
 }
@@ -160,8 +197,12 @@ function drawGrid() {
 // ── Signal helpers ─────────────────────────────────────────────────────────
 let t0=0;
 
-function synthSample(ch, phase) {
-  return WF[ch.waveform](phase*ch.freq)*ch.amp;
+// additive sum of the channel's partials at parametric position t (in periods of
+// the channel fundamental). Each partial: ratio (×fundamental), amp, phase (0..1).
+function synthAt(ch, t) {
+  const wf = WF[ch.waveform]; let s = 0;
+  for (const p of ch.partials) s += p.amp * wf(p.ratio*t + p.phase);
+  return s * ch.amp * partNorm(ch);
 }
 
 function getMicBuf(ch) {
@@ -170,9 +211,8 @@ function getMicBuf(ch) {
   return ch.micBuf;
 }
 
-// returns array of values -1..1 for wave mode.
-// freqOverride (optional) replaces the synth visual frequency (used by COMBINA).
-function getWaveSamples(ch, n, freqOverride) {
+// returns array of values -1..1 for the scope render
+function getWaveSamples(ch, n) {
   if (ch.src==="mic" || ch.src==="input") {
     const buf = getMicBuf(ch);
     if (!buf) return new Float32Array(n);
@@ -185,12 +225,11 @@ function getWaveSamples(ch, n, freqOverride) {
     for (let i=0;i<n;i++) out[i] = (buf[start + Math.floor(i/n*win)]||0)*ch.gain;
     return out;
   } else {
+    // synth: additive partials over the channel fundamental (ch.freq cycles across
+    // the window). Drives the figure; the audio bank plays the same partials.
     const out = new Float32Array(n);
-    const f = freqOverride || ch.freq;
-    for (let i=0;i<n;i++) {
-      const t = (i/n)*G.timebase + t0*f*0.0001;
-      out[i] = WF[ch.waveform](t*f)*ch.amp;
-    }
+    const drift = t0*ch.freq*0.0001;        // slow rotation so it isn't frozen
+    for (let i=0;i<n;i++) out[i] = synthAt(ch, (i/n)*G.timebase*ch.freq + drift);
     return out;
   }
 }
@@ -226,16 +265,7 @@ function drawXY() {
 
   const n = Math.min(W*2, 1440);
   const samplesX = xCh ? getWaveSamples(xCh, n) : new Float32Array(n);
-  // COMBINA · SORGENTI: RAPPORTO locks the Y synth frequency to X×ratio (stable
-  // Lissajous from two synths); for mic/line it's ignored.
-  const yFreq = (xCh && yCh && yCh.src==="synth" && xCh.src==="synth") ? xCh.freq*GEN.ratio : null;
-  let samplesY = yCh ? getWaveSamples(yCh, n, yFreq) : new Float32Array(n);
-  // FASE: rotate Y by a fraction of the window → rotates the figure (works for any
-  // source, synth or input)
-  if (GEN.phase) {
-    const k = Math.floor(((GEN.phase%1)+1)%1 * n);
-    if (k) { const r = new Float32Array(n); for (let i=0;i<n;i++) r[i]=samplesY[(i+k)%n]; samplesY = r; }
-  }
+  const samplesY = yCh ? getWaveSamples(yCh, n) : new Float32Array(n);
   const marginX  = W/2-8;
   const marginY  = H/2-8;
 
@@ -246,20 +276,6 @@ function drawXY() {
   const colA = xCh ? xCh.color : yCh.color;
   const colB = yCh ? yCh.color : xCh.color;
   paintXY(pts, colA, colB);
-}
-
-// generative engine → X-Y figure (its own analysers, channel colours)
-function drawGen() {
-  if (!GEN.on || !GEN.analyser[0]) return;
-  GEN.analyser[0].getFloatTimeDomainData(GEN.buf[0]);
-  GEN.analyser[1].getFloatTimeDomainData(GEN.buf[1]);
-  const bx = GEN.buf[0], by = GEN.buf[1], Ln = bx.length;
-  const n = Math.min(W*2, 1440), marginX = W/2-8, marginY = H/2-8;
-  const pts = Array.from({length:n}, (_,i) => {
-    const idx = Math.floor(i/n*Ln);
-    return [W/2 + (bx[idx]||0)*marginX, H/2 - (by[idx]||0)*marginY];
-  });
-  paintXY(pts, CH[0].color, CH[1].color);
 }
 
 // ── MODULA: movement & rhythm applied to any X-Y figure ──────────────────────
@@ -314,12 +330,13 @@ function loop(ts) {
 
   offCtx.fillStyle="rgba(0,0,0,0.2)"; offCtx.fillRect(0,0,W,H);
   if (G.mode==="wave")    drawWave();
-  else if (G.mode==="xy") { if (GEN.on) drawGen(); else drawXY(); }
+  else if (G.mode==="xy") drawXY();
 
-  // PULSO drives the engine's master amplitude too → the rhythm is audible
-  if (GEN.on && GEN.master) {
-    const g = MOD.pulse>0 ? 0.5*(0.15+0.85*pulseHit()) : 0.5;
-    GEN.master.gain.setTargetAtTime(g, AUDIO.ctx.currentTime, 0.008);
+  // PULSO drives the master amplitude too → the rhythm is audible (X-Y only)
+  if (AUDIO.master) {
+    const g = (G.mode==="xy" && MOD.pulse>0) ? AUDIO.masterVol*(0.15+0.85*pulseHit())
+                                             : (AUDIO.masterMute?0:AUDIO.masterVol);
+    AUDIO.master.gain.setTargetAtTime(g, AUDIO.ctx.currentTime, 0.008);
   }
 
   ctx.fillStyle="#000"; ctx.fillRect(0,0,W,H);
@@ -436,138 +453,9 @@ async function populateInputDevices() {
   } catch(e) { console.warn(e); }
 }
 
-// ── Generative engine ────────────────────────────────────────────────────────
-// Two flavours, both producing a stable X-Y figure + stereo audio (L=X, R=Y):
-//  • LISSAJOUS: 2 sines per axis (fundamental + 3rd harmonic), DelayNode on Y = phase
-//  • SPIROGRAFO: epicycle = outer circle (R) + inner circle (r) at k× speed; DelayNodes
-//    make the cos/sin pairs and set the inner phase. Knobs: FREQUENZA · RAPPORTO/GIRI ·
-//    ARMONICA/RAGGIO · FASE. Everything glides (no clicks).
-const GEN = {
-  on:false, type:"sorgenti",
-  base:110, ratio:2, harm:0, phase:0.25,
-  master:null, busX:null, busY:null,
-  oscs:[], disc:[],
-  analyser:[null,null], buf:[null,null],
-  // lissajous refs
-  delayY:null, oscX1:null, oscX2:null, oscY1:null, oscY2:null, gHarmX:null, gHarmY:null,
-  // spiro refs
-  oscO:null, oscI:null, dOY:null, dIX:null, dIY:null, gIX:null, gIY:null,
-};
-const GEN_HARM = 3;          // which harmonic the ARMONICA knob adds (lissajous)
-const GEN_FUND = 0.6;        // fundamental level (leaves headroom for the harmonic)
-const GEN_HMAX = 0.4;        // max harmonic level → fundamental+harmonic ≤ 1
-const SPIRO_R  = 0.55;       // outer circle radius
-const SPIRO_RMAX = 0.45;     // max inner radius → R + r ≤ 1
-
-function buildLissajous(ctx, busX, busY) {
-  const fX = GEN.base, fY = GEN.base*GEN.ratio;
-  GEN.oscX1 = ctx.createOscillator(); GEN.oscX1.type="sine"; GEN.oscX1.frequency.value=fX;
-  const gX1 = ctx.createGain(); gX1.gain.value=GEN_FUND; GEN.oscX1.connect(gX1).connect(busX);
-  GEN.oscX2 = ctx.createOscillator(); GEN.oscX2.type="sine"; GEN.oscX2.frequency.value=fX*GEN_HARM;
-  GEN.gHarmX = ctx.createGain(); GEN.gHarmX.gain.value=GEN.harm*GEN_HMAX; GEN.oscX2.connect(GEN.gHarmX).connect(busX);
-
-  const preY = ctx.createGain();
-  GEN.oscY1 = ctx.createOscillator(); GEN.oscY1.type="sine"; GEN.oscY1.frequency.value=fY;
-  const gY1 = ctx.createGain(); gY1.gain.value=GEN_FUND; GEN.oscY1.connect(gY1).connect(preY);
-  GEN.oscY2 = ctx.createOscillator(); GEN.oscY2.type="sine"; GEN.oscY2.frequency.value=fY*GEN_HARM;
-  GEN.gHarmY = ctx.createGain(); GEN.gHarmY.gain.value=GEN.harm*GEN_HMAX; GEN.oscY2.connect(GEN.gHarmY).connect(preY);
-  GEN.delayY = ctx.createDelay(1); GEN.delayY.delayTime.value = GEN.phase/Math.max(1,fY);
-  preY.connect(GEN.delayY).connect(busY);
-
-  GEN.oscs.push(GEN.oscX1,GEN.oscX2,GEN.oscY1,GEN.oscY2);
-  GEN.disc.push(gX1,GEN.gHarmX,gY1,GEN.gHarmY,preY,GEN.delayY);
-}
-
-function buildSpiro(ctx, busX, busY) {
-  const f = GEN.base, k = GEN.ratio, r = GEN.harm*SPIRO_RMAX, ph = GEN.phase;
-  // outer circle: one osc → X direct, → Y via 90° delay
-  GEN.oscO = ctx.createOscillator(); GEN.oscO.type="sine"; GEN.oscO.frequency.value=f;
-  const gOX = ctx.createGain(); gOX.gain.value=SPIRO_R; GEN.oscO.connect(gOX).connect(busX);
-  GEN.dOY = ctx.createDelay(1); GEN.dOY.delayTime.value=0.25/Math.max(1,f);
-  const gOY = ctx.createGain(); gOY.gain.value=SPIRO_R; GEN.oscO.connect(GEN.dOY); GEN.dOY.connect(gOY).connect(busY);
-  // inner circle at k× speed: phase ph on X, ph+90° on Y
-  GEN.oscI = ctx.createOscillator(); GEN.oscI.type="sine"; GEN.oscI.frequency.value=f*k;
-  GEN.dIX = ctx.createDelay(1); GEN.dIX.delayTime.value=ph/Math.max(1,f*k);
-  GEN.gIX = ctx.createGain(); GEN.gIX.gain.value=r; GEN.oscI.connect(GEN.dIX); GEN.dIX.connect(GEN.gIX).connect(busX);
-  GEN.dIY = ctx.createDelay(1); GEN.dIY.delayTime.value=(ph+0.25)/Math.max(1,f*k);
-  GEN.gIY = ctx.createGain(); GEN.gIY.gain.value=r; GEN.oscI.connect(GEN.dIY); GEN.dIY.connect(GEN.gIY).connect(busY);
-
-  GEN.oscs.push(GEN.oscO,GEN.oscI);
-  GEN.disc.push(gOX,GEN.dOY,gOY,GEN.dIX,GEN.gIX,GEN.dIY,GEN.gIY);
-}
-
-function startGen() {
-  if (GEN.on) return;
-  const ctx = ensureAudio();
-  if (ctx.state==="suspended") ctx.resume();
-  GEN.oscs = []; GEN.disc = [];
-  const busX = ctx.createGain(), busY = ctx.createGain();
-  GEN.busX = busX; GEN.busY = busY;
-
-  const aX = ctx.createAnalyser(); aX.fftSize=2048; aX.smoothingTimeConstant=0;
-  const aY = ctx.createAnalyser(); aY.fftSize=2048; aY.smoothingTimeConstant=0;
-  busX.connect(aX); busY.connect(aY);
-  GEN.analyser=[aX,aY]; GEN.buf=[new Float32Array(2048), new Float32Array(2048)];
-
-  GEN.master = ctx.createGain(); GEN.master.gain.value=0.5;
-  const merger = ctx.createChannelMerger(2);
-  busX.connect(merger,0,0); busY.connect(merger,0,1);
-  merger.connect(GEN.master); GEN.master.connect(AUDIO.master);
-  GEN.disc.push(busX,busY,aX,aY,merger);
-
-  if (GEN.type==="spiro") buildSpiro(ctx, busX, busY); else buildLissajous(ctx, busX, busY);
-  GEN.oscs.forEach(o=>o.start());
-  GEN.on = true;
-}
-
-function updateGen() {
-  if (!GEN.on || !AUDIO.ctx) return;
-  const t = AUDIO.ctx.currentTime, ramp = (p,v)=>p.setTargetAtTime(v,t,0.02);
-  if (GEN.type==="spiro") {
-    const f = GEN.base, k = GEN.ratio, r = GEN.harm*SPIRO_RMAX, ph = GEN.phase;
-    ramp(GEN.oscO.frequency, f); ramp(GEN.oscI.frequency, f*k);
-    ramp(GEN.dOY.delayTime, 0.25/Math.max(1,f));
-    ramp(GEN.dIX.delayTime, ph/Math.max(1,f*k));
-    ramp(GEN.dIY.delayTime, (ph+0.25)/Math.max(1,f*k));
-    ramp(GEN.gIX.gain, r); ramp(GEN.gIY.gain, r);
-  } else {
-    const fX = GEN.base, fY = GEN.base*GEN.ratio;
-    ramp(GEN.oscX1.frequency, fX); ramp(GEN.oscX2.frequency, fX*GEN_HARM);
-    ramp(GEN.oscY1.frequency, fY); ramp(GEN.oscY2.frequency, fY*GEN_HARM);
-    ramp(GEN.gHarmX.gain, GEN.harm*GEN_HMAX); ramp(GEN.gHarmY.gain, GEN.harm*GEN_HMAX);
-    ramp(GEN.delayY.delayTime, GEN.phase/Math.max(1,fY));
-  }
-}
-
-function stopGen() {
-  if (!GEN.on) return;
-  GEN.oscs.forEach(o=>{ try{o.stop();}catch(e){} try{o.disconnect();}catch(e){} });
-  GEN.disc.forEach(nd=>{ try{nd.disconnect();}catch(e){} });
-  try { GEN.master.disconnect(); } catch(e){}
-  GEN.on = false;
-}
-
-// switch the X-Y combination flavour: relabel/show the right knobs, (re)build engine
-function setGenType(type) {
-  GEN.type = type;
-  document.querySelectorAll("#gen-type button").forEach(b=>b.classList.toggle("active", b.dataset.t===type));
-  document.getElementById("lbl-gratio").textContent = type==="spiro" ? "GIRI INTERNI" : "RAPPORTO X:Y";
-  document.getElementById("lbl-gharm").textContent  = type==="spiro" ? "RAGGIO INT."  : "ARMONICA";
-  // SORGENTI uses only RAPPORTO + FASE (combines the two selectable sources);
-  // the engines also use FREQUENZA + ARMONICA/RAGGIO
-  const engine = (type!=="sorgenti");
-  document.getElementById("row-gbase").style.display = engine ? "flex" : "none";
-  document.getElementById("row-gharm").style.display = engine ? "flex" : "none";
-  stopGen();
-  applyGenMode();
-  refreshChannelCards();
-}
-
 
 // ── Controls ───────────────────────────────────────────────────────────────
 function setMode(m) {
-  // the X-Y generative engines run only in X-Y
-  if (m !== "xy") stopGen();
   G.mode = m;
   ["wave","xy"].forEach(id => {
     const btn = document.getElementById("tab-"+id);
@@ -583,23 +471,73 @@ function setMode(m) {
     document.getElementById("yoff-row-ch"+i).style.display = m==="xy"?"none":"flex";
   });
   document.getElementById("combina-card").style.display = m==="xy"?"":"none";
-  if (m === "xy") applyGenMode();        // start engine / show channels per COMBINA type
   clearScreen();
-  refreshChannelCards();
 }
 
-// in X-Y, the synthetic engines (lissajous/spiro) hide the per-channel cards;
-// SORGENTI keeps them visible (you pick the two sources)
-function refreshChannelCards() {
-  const hide = (G.mode==="xy" && GEN.type!=="sorgenti");
-  [0,1].forEach(i => { document.getElementById("card-ch"+i).style.display = hide?"none":""; });
+// ── Per-channel additive oscillators (the modular core) ──────────────────────
+// Each synth channel is a stack of partials {ratio, amp, phase}. Lissajous = one
+// partial per channel at different pitches; spirograph = matching partials in
+// quadrature (X cos / Y sin). The editor lives in the channel card.
+function renderPartials(i) {
+  const box = document.getElementById("osc-ch"+i);
+  if (!box) return;
+  const ch = CH[i], col = ch.color;
+  let html = "";
+  ch.partials.forEach((p,j) => {
+    html += `<div style="border-left:2px solid ${col}55;padding-left:6px;margin-top:6px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span class="sl" style="font-size:8px;color:${col}">OSC ${j+1}</span>
+        ${j>0?`<button onclick="removePartial(${i},${j})" style="font-size:9px;line-height:1;background:none;border:1px solid #444;color:#999;border-radius:3px;padding:1px 6px;cursor:pointer">×</button>`:``}
+      </div>
+      <div class="slider-meta"><span class="sl">RAPP</span><span class="sv" id="vp-${i}-${j}-ratio">${p.ratio.toFixed(2)}</span></div>
+      <input type="range" min="0.5" max="8" step="0.01" value="${p.ratio}" oninput="setPart(${i},${j},'ratio',this.value)">
+      <div class="slider-meta"><span class="sl">AMP</span><span class="sv" id="vp-${i}-${j}-amp">${p.amp.toFixed(2)}</span></div>
+      <input type="range" min="0" max="1" step="0.01" value="${p.amp}" oninput="setPart(${i},${j},'amp',this.value)">
+      <div class="slider-meta"><span class="sl">FASE</span><span class="sv" id="vp-${i}-${j}-phase">${p.phase.toFixed(2)}</span></div>
+      <input type="range" min="0" max="1" step="0.01" value="${p.phase}" oninput="setPart(${i},${j},'phase',this.value)">
+    </div>`;
+  });
+  if (ch.partials.length < MAXPARTIALS)
+    html += `<button onclick="addPartial(${i})" style="margin-top:6px;font-size:8px;letter-spacing:1px;background:none;border:1px dashed ${col}88;color:${col};border-radius:4px;padding:4px;cursor:pointer;width:100%">+ OSCILLATORE</button>`;
+  box.innerHTML = html;
 }
 
-// reconcile the engine with the current COMBINA type (only meaningful in X-Y)
-function applyGenMode() {
-  if (G.mode!=="xy") { stopGen(); return; }
-  if (GEN.type==="lissajous" || GEN.type==="spiro") startGen();
-  else stopGen();                       // SORGENTI → no synthetic engine
+function setPart(i,j,key,val) {
+  CH[i].partials[j][key] = parseFloat(val);
+  const el = document.getElementById(`vp-${i}-${j}-${key}`);
+  if (el) el.textContent = parseFloat(val).toFixed(2);
+  updatePartialAudio(i);
+}
+
+function addPartial(i) {
+  if (CH[i].partials.length >= MAXPARTIALS) return;
+  CH[i].partials.push({ ratio:CH[i].partials.length+1, amp:0.5, phase:0 });
+  buildChannelSynth(i); renderPartials(i);
+}
+
+function removePartial(i,j) {
+  CH[i].partials.splice(j,1);
+  buildChannelSynth(i); renderPartials(i);
+}
+
+// quick-start figures (just configure pitches + partials of the two channels)
+function applyPreset(name) {
+  const P = {
+    lissajous:[[220,[{ratio:1,amp:1,phase:0}]],    [330,[{ratio:1,amp:1,phase:0.25}]]],
+    cerchio:  [[220,[{ratio:1,amp:1,phase:0.25}]], [220,[{ratio:1,amp:1,phase:0}]]],
+    spiro:    [[220,[{ratio:1,amp:0.6,phase:0.25},{ratio:4,amp:0.4,phase:0.25}]],
+               [220,[{ratio:1,amp:0.6,phase:0},   {ratio:4,amp:0.4,phase:0}]]],
+    reset:    [[220,[{ratio:1,amp:1,phase:0}]],    [330,[{ratio:1,amp:1,phase:0}]]],
+  }[name];
+  if (!P) return;
+  P.forEach(([pitch,parts],i)=>{
+    const ch=CH[i];
+    ch.pitch=pitch; ch.freq=visCycles(pitch);
+    ch.partials=parts.map(p=>({...p}));
+    const sl=document.getElementById(`sl-pitch-ch${i}`), vv=document.getElementById(`v-pitch-ch${i}`);
+    if (sl) sl.value=pitch; if (vv) vv.textContent=pitch.toFixed(0)+"Hz";
+    buildChannelSynth(i); renderPartials(i);
+  });
 }
 
 // sync the toggle button, card opacity and LED to ch.enabled
@@ -672,8 +610,7 @@ async function setSrc(i, btn) {
 
 function setWave(i, btn) {
   CH[i].waveform = btn.dataset.w;
-  const s = AUDIO.chan[i];
-  if (s && s.osc) s.osc.type = oscType(CH[i].waveform);
+  AUDIO.chan[i]?.parts.forEach(pt => { if (pt.osc) pt.osc.type = oscType(CH[i].waveform); });
   btn.closest(".seg").querySelectorAll("button").forEach(b=>{
     const a = b===btn;
     b.className = a?"active":"";
@@ -728,6 +665,7 @@ function setColor(i, color) {
     const el = document.getElementById(id);
     if (el) el.style.color = color;
   });
+  renderPartials(i);    // recolor the oscillator editor accents
   updateLED(i);
 }
 
@@ -785,14 +723,6 @@ window.addEventListener("load", ()=>{
   initCanvas();
   new ResizeObserver(initCanvas).observe(canvas);
 
-  // generative engine knobs
-  bindSlider("sl-gbase",  "v-gbase",  GEN, "base",  v=>v.toFixed(0)+"Hz");
-  bindSlider("sl-gratio", "v-gratio", GEN, "ratio", v=>v.toFixed(2));
-  bindSlider("sl-gharm",  "v-gharm",  GEN, "harm",  v=>v.toFixed(2));
-  bindSlider("sl-gphase", "v-gphase", GEN, "phase", v=>v.toFixed(2));
-  ["sl-gbase","sl-gratio","sl-gharm","sl-gphase"].forEach(id =>
-    document.getElementById(id).addEventListener("input", updateGen));
-
   // MODULA: movement & rhythm
   bindSlider("sl-mrot",   "v-mrot",   MOD, "rot",      v=>v.toFixed(2));
   bindSlider("sl-mpulse", "v-mpulse", MOD, "pulse",    v=>v.toFixed(1));
@@ -825,8 +755,7 @@ window.addEventListener("load", ()=>{
     document.getElementById(`sl-pitch-ch${i}`).addEventListener("input", e=>{
       const p = parseFloat(e.target.value);
       ch.freq = visCycles(p);
-      const s = AUDIO.chan[i];
-      if (s.osc) s.osc.frequency.setTargetAtTime(p, AUDIO.ctx.currentTime, 0.01);
+      updatePartialAudio(i);            // repitch every partial of the bank
     });
 
     // swatches
@@ -866,8 +795,8 @@ window.addEventListener("load", ()=>{
   bindMixVol(null, "vol-master", "vv-master");
   refreshMuteBtn("master");
 
-  // init COMBINA panel (labels + which knobs show) and mode tab styles
-  setGenType("sorgenti");
+  // init per-channel oscillator editors + mode tab styles
+  [0,1].forEach(renderPartials);
   setMode("wave");
 
   requestAnimationFrame(loop);
