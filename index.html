@@ -29,9 +29,9 @@
 <div id="stage">
   <div id="screen-wrap">
     <canvas id="scope"></canvas>
-    <div id="screen-label">● ONDA</div>
+    <div id="screen-label">ONDA</div>
     <div id="mode-label">ONDA</div>
-    <button id="btn-fs" onclick="toggleFullscreen()" aria-label="Tutto schermo">⛶</button>
+    <button id="btn-fs" onclick="toggleFullscreen()" aria-label="Tutto schermo">TUTTO SCHERMO</button>
   </div>
 
   <div class="tabbar">
@@ -41,7 +41,7 @@
   </div>
 
   <div id="transport">
-    <button id="btn-run" onclick="toggleRun()">■&nbsp;&nbsp;STOP</button>
+    <button id="btn-run" onclick="toggleRun()">STOP</button>
     <button id="btn-clr" onclick="clearScreen()">PULISCI</button>
   </div>
 </div>
@@ -60,14 +60,14 @@
       <input type="range" id="sl-dfreq" min="40" max="1000" step="1" value="220">
     </div>
     <div class="seg">
-      <button id="btn-draw-play" onclick="drawConvert()">SUONA ▶</button>
+      <button id="btn-draw-play" onclick="drawConvert()">SUONA</button>
       <button onclick="resetDraw()">PULISCI</button>
     </div>
   </div>
 
   <!-- Global -->
   <div class="ch-card" style="background:var(--yellow)">
-    <span class="section-label">ROBA GLOBALE</span>
+    <span class="section-label">GENERALE</span>
     <div class="slider-row">
       <div class="slider-meta"><span class="sl">RUMORE BIANCO</span><span class="sv" id="v-noise" style="color:#555">0.00</span></div>
       <input type="range" id="sl-noise" min="0" max="1" step="0.01" value="0" style="accent-color:#555">
@@ -96,7 +96,7 @@
       <span class="sl" style="font-size:9px;letter-spacing:1px;color:#444">SORGENTE</span>
       <div class="seg" style="margin-top:4px" id="src-ch0">
         <button class="active" data-v="synth" onclick="setSrc(0,this)">SINTETIZZATORE</button>
-        <button data-v="mic" onclick="setSrc(0,this)">MICROFONO 🎤</button>
+        <button data-v="mic" onclick="setSrc(0,this)">MICROFONO</button>
         <button data-v="input" onclick="setSrc(0,this)">LINEA (L)</button>
       </div>
     </div>
@@ -156,7 +156,7 @@
       <span class="sl" style="font-size:9px;letter-spacing:1px;color:#444">SORGENTE</span>
       <div class="seg" style="margin-top:4px" id="src-ch1">
         <button class="active" data-v="synth" onclick="setSrc(1,this)">SINTETIZZATORE</button>
-        <button data-v="mic" onclick="setSrc(1,this)">MICROFONO 🎤</button>
+        <button data-v="mic" onclick="setSrc(1,this)">MICROFONO</button>
         <button data-v="input" onclick="setSrc(1,this)">LINEA (R)</button>
       </div>
     </div>
@@ -216,7 +216,7 @@
       </div>
       <input type="range" id="vol-master" min="0" max="1" step="0.01" value="0.7">
       <div class="mix-head" style="margin-top:2px">
-        <button class="mix-mute" id="btn-audiotest" onclick="audioTest()" style="margin-left:auto">TEST ♪</button>
+        <button class="mix-mute" id="btn-audiotest" onclick="audioTest()" style="margin-left:auto">PROVA</button>
       </div>
     </div>
 
