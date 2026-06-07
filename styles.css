@@ -78,6 +78,7 @@ body {
   width: 24px;
   height: 14px;
   flex-shrink: 0;
+  image-rendering: auto;
 }
 
 #leds {
