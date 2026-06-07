@@ -26,6 +26,16 @@
     <canvas id="scope"></canvas>
     <div id="screen-label">ONDA</div>
     <button id="btn-fs" onclick="toggleFullscreen()" aria-label="Tutto schermo">GIGANTE</button>
+
+    <!-- fullscreen mini-controls (YouTube-style, auto-hiding); only shown in .fs -->
+    <div id="fs-bar" class="hidden">
+      <button class="fs-btn" id="fs-run" onclick="toggleRun()">FERMA</button>
+      <div class="fs-seg" id="fs-mode">
+        <button class="active" data-m="wave" onclick="setMode('wave')">ONDA</button>
+        <button data-m="xy" onclick="setMode('xy')">X-Y</button>
+      </div>
+      <button class="fs-btn" id="fs-exit" onclick="toggleFullscreen()">ESCI</button>
+    </div>
   </div>
 
   <div class="tabbar">
