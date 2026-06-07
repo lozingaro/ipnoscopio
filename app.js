@@ -1,10 +1,6 @@
 // ── Palette ────────────────────────────────────────────────────────────────
 const PALETTE = ["#39ff14","#00cfff","#ff6b35","#ffdd00","#ff3399","#aa44ff","#ffffff","#ff4444"];
 
-// STRILLO (audible pitch, Hz) → number of wave cycles drawn on screen.
-// One knob for both: turn it up and the tone rises AND the wave gets busier.
-const visCycles = p => Math.min(20, Math.max(1, p/55));
-
 // average two #rrggbb colours → a single blended #rrggbb
 function blendHex(a, b) {
   const ch = (h,i) => parseInt(h.slice(1+i*2, 3+i*2), 16);
@@ -30,14 +26,15 @@ function findTrigger(buf, level, hyst=0.02) {
 const G = { timebase:1, noise:0, trig:0, mode:"wave", running:true };
 
 const CH = [
-  { enabled:true, src:"synth", waveform:"sine", freq:2, pitch:220, amp:0.75, gain:2, yOff:0, color:"#39ff14", axis:"x",
-    partials:[{ratio:1, amp:1, phase:0}],
+  { enabled:true, src:"synth", waveform:"sine", gain:1, yOff:0, color:"#39ff14", axis:"x",
+    partials:[{freq:220, amp:1, phase:0}],
     stream:null, micNode:null, analyser:null, micBuf:null, micOk:false },
-  { enabled:true, src:"synth", waveform:"sine", freq:3, pitch:330, amp:0.75, gain:2, yOff:0, color:"#00cfff", axis:"y",
-    partials:[{ratio:1, amp:1, phase:0}],
+  { enabled:true, src:"synth", waveform:"sine", gain:1, yOff:0, color:"#00cfff", axis:"y",
+    partials:[{freq:330, amp:1, phase:0}],
     stream:null, micNode:null, analyser:null, micBuf:null, micOk:false },
 ];
 const MAXPARTIALS = 4;
+const CYCLE_HZ = 55;     // Hz that map to one on-screen cycle (visual scaling only)
 // keep the additive sum bounded to -1..1 regardless of how many partials are on
 const partNorm = ch => 1/Math.max(1, ch.partials.reduce((s,p)=>s+p.amp,0));
 
@@ -73,8 +70,12 @@ function ensureAudio() {
   AUDIO.master.connect(ctx.destination);
   AUDIO.chan.forEach((c,i) => {
     c.gain = ctx.createGain();
-    c.gain.gain.value = 0;            // applyChan sets the real value below
+    c.gain.gain.value = 0;            // applyChan (mixer volume) sets the real value below
     c.gain.connect(AUDIO.master);
+    // GUADAGNO: a real per-channel gain every source passes through (synth/mic/line)
+    c.srcGain = ctx.createGain();
+    c.srcGain.gain.value = CH[i].gain;
+    c.srcGain.connect(c.gain);
     // the "synth" source is an additive bank of oscillators summing into synthSum
     c.synthSum = ctx.createGain();
     c.synthSum.gain.value = 1;
@@ -96,7 +97,7 @@ function buildChannelSynth(i) {
   c.parts = [];
   const norm = partNorm(ch);
   ch.partials.forEach(p => {
-    const f = ch.pitch * p.ratio;
+    const f = p.freq;
     const osc = ctx.createOscillator(); osc.type = oscType(ch.waveform); osc.frequency.value = f;
     const delay = ctx.createDelay(1);   delay.delayTime.value = p.phase/Math.max(1,f);
     const gain = ctx.createGain();      gain.gain.value = p.amp*norm;
@@ -113,25 +114,25 @@ function updatePartialAudio(i) {
   if (c.parts.length !== ch.partials.length) { buildChannelSynth(i); return; }
   const t = ctx.currentTime, norm = partNorm(ch);
   ch.partials.forEach((p,j) => {
-    const pt = c.parts[j], f = ch.pitch*p.ratio;
+    const pt = c.parts[j], f = p.freq;
     pt.osc.frequency.setTargetAtTime(f, t, 0.02);
     pt.delay.delayTime.setTargetAtTime(p.phase/Math.max(1,f), t, 0.02);
     pt.gain.gain.setTargetAtTime(p.amp*norm, t, 0.02);
   });
 }
 
-// Connect the node matching the channel's current source to its mixer gain,
-// detaching any previously-connected source first (so we never double up).
+// Connect the node matching the channel's current source to its GUADAGNO node
+// (srcGain → mixer gain), detaching any previously-connected source first.
 function routeChannel(i) {
   const c = AUDIO.chan[i];
-  if (!c || !c.gain) return;
-  const cg = c.gain;
-  try { c.synthSum?.disconnect(cg); }    catch(e){}
-  try { CH[i].micNode?.disconnect(cg); } catch(e){}
-  try { INPUT.tap[i]?.disconnect(cg); }  catch(e){}
-  if      (CH[i].src === "synth") c.synthSum?.connect(cg);
-  else if (CH[i].src === "mic")   CH[i].micNode?.connect(cg);
-  else if (CH[i].src === "input") INPUT.tap[i]?.connect(cg);
+  if (!c || !c.srcGain) return;
+  const sg = c.srcGain;
+  try { c.synthSum?.disconnect(sg); }    catch(e){}
+  try { CH[i].micNode?.disconnect(sg); } catch(e){}
+  try { INPUT.tap[i]?.disconnect(sg); }  catch(e){}
+  if      (CH[i].src === "synth") c.synthSum?.connect(sg);
+  else if (CH[i].src === "mic")   CH[i].micNode?.connect(sg);
+  else if (CH[i].src === "input") INPUT.tap[i]?.connect(sg);
 }
 
 function applyChan(i) {
@@ -197,12 +198,12 @@ function drawGrid() {
 // ── Signal helpers ─────────────────────────────────────────────────────────
 let t0=0;
 
-// additive sum of the channel's partials at parametric position t (in periods of
-// the channel fundamental). Each partial: ratio (×fundamental), amp, phase (0..1).
-function synthAt(ch, t) {
+// additive sum of the channel's oscillators at window position u (0..timebase).
+// Each oscillator: freq (Hz, drawn as freq/CYCLE_HZ cycles), amp, phase (0..1).
+function synthAt(ch, u) {
   const wf = WF[ch.waveform]; let s = 0;
-  for (const p of ch.partials) s += p.amp * wf(p.ratio*t + p.phase);
-  return s * ch.amp * partNorm(ch);
+  for (const o of ch.partials) s += o.amp * wf(o.freq/CYCLE_HZ*u + o.phase);
+  return s * partNorm(ch);
 }
 
 function getMicBuf(ch) {
@@ -225,11 +226,11 @@ function getWaveSamples(ch, n) {
     for (let i=0;i<n;i++) out[i] = (buf[start + Math.floor(i/n*win)]||0)*ch.gain;
     return out;
   } else {
-    // synth: additive partials over the channel fundamental (ch.freq cycles across
-    // the window). Drives the figure; the audio bank plays the same partials.
+    // synth: additive oscillators (each at its own Hz). Drives the figure; the
+    // audio bank plays the same oscillators. GUADAGNO scales it like the others.
     const out = new Float32Array(n);
-    const drift = t0*ch.freq*0.0001;        // slow rotation so it isn't frozen
-    for (let i=0;i<n;i++) out[i] = synthAt(ch, (i/n)*G.timebase*ch.freq + drift);
+    const drift = t0*0.0001;                 // slow rotation so it isn't frozen
+    for (let i=0;i<n;i++) out[i] = synthAt(ch, (i/n)*G.timebase + drift)*ch.gain;
     return out;
   }
 }
@@ -453,8 +454,8 @@ function renderPartials(i) {
         ${j>0?`<button class="osc-del" onclick="removePartial(${i},${j})" aria-label="Elimina oscillatore">RIMUOVI ✕</button>`:``}
       </div>
       <div class="slider-row">
-        <div class="slider-meta"><span class="sl">RAPPORTO</span><span class="sv" id="vp-${i}-${j}-ratio">${p.ratio.toFixed(2)}</span></div>
-        <input type="range" min="0.5" max="8" step="0.01" value="${p.ratio}" oninput="setPart(${i},${j},'ratio',this.value)">
+        <div class="slider-meta"><span class="sl">FREQUENZA</span><span class="sv" id="vp-${i}-${j}-freq">${Math.round(p.freq)}Hz</span></div>
+        <input type="range" min="20" max="2000" step="1" value="${p.freq}" oninput="setPart(${i},${j},'freq',this.value)">
       </div>
       <div class="slider-row">
         <div class="slider-meta"><span class="sl">AMPIEZZA</span><span class="sv" id="vp-${i}-${j}-amp">${p.amp.toFixed(2)}</span></div>
@@ -472,15 +473,16 @@ function renderPartials(i) {
 }
 
 function setPart(i,j,key,val) {
-  CH[i].partials[j][key] = parseFloat(val);
+  const v = parseFloat(val);
+  CH[i].partials[j][key] = v;
   const el = document.getElementById(`vp-${i}-${j}-${key}`);
-  if (el) el.textContent = parseFloat(val).toFixed(2);
+  if (el) el.textContent = key==="freq" ? Math.round(v)+"Hz" : v.toFixed(2);
   updatePartialAudio(i);
 }
 
 function addPartial(i) {
   if (CH[i].partials.length >= MAXPARTIALS) return;
-  CH[i].partials.push({ ratio:CH[i].partials.length+1, amp:0.5, phase:0 });
+  CH[i].partials.push({ freq:220, amp:0.5, phase:0 });
   buildChannelSynth(i); renderPartials(i);
 }
 
@@ -516,10 +518,8 @@ function updateSrcUI(i, val) {
     b.style.color       = a?"#000":"#444";
     b.style.borderColor = a?ch.color:"#2a2a2a";
   });
-  document.getElementById("synth-ch"+i).style.display     = val==="synth"?"block":"none";
-  document.getElementById("amp-row-ch"+i).style.display   = val==="synth"?"flex":"none";
-  document.getElementById("pitch-row-ch"+i).style.display = val==="synth"?"flex":"none";
-  document.getElementById("gain-row-ch"+i).style.display  = (val==="mic"||val==="input")?"flex":"none";
+  document.getElementById("synth-ch"+i).style.display = val==="synth"?"block":"none";
+  // GUADAGNO (real per-channel gain) applies to every source → always visible
 }
 
 async function setSrc(i, btn) {
@@ -605,12 +605,12 @@ function setColor(i, color) {
   const mixName = document.getElementById("mixname-ch"+i);
   if (mixName) mixName.style.color = color;
   // update slider accent
-  ["sl-amp-ch"+i,"sl-pitch-ch"+i,"sl-gain-ch"+i,"sl-yoff-ch"+i].forEach(id=>{
+  ["sl-gain-ch"+i,"sl-yoff-ch"+i].forEach(id=>{
     const el = document.getElementById(id);
     if (el) el.style.accentColor = color;
   });
   // update value displays
-  ["v-amp-ch"+i,"v-pitch-ch"+i,"v-gain-ch"+i,"v-yoff-ch"+i].forEach(id=>{
+  ["v-gain-ch"+i,"v-yoff-ch"+i].forEach(id=>{
     const el = document.getElementById(id);
     if (el) el.style.color = color;
   });
@@ -705,17 +705,12 @@ window.addEventListener("load", ()=>{
   // sliders per channel
   [0,1].forEach(i=>{
     const ch = CH[i];
-    bindSlider(`sl-amp-ch${i}`,  `v-amp-ch${i}`,  ch, "amp",   v=>v.toFixed(2));
-    bindSlider(`sl-pitch-ch${i}`,`v-pitch-ch${i}`,ch, "pitch", v=>v.toFixed(0)+"Hz");
-    bindSlider(`sl-gain-ch${i}`, `v-gain-ch${i}`, ch, "gain",  v=>"×"+v.toFixed(1));
-    bindSlider(`sl-yoff-ch${i}`, `v-yoff-ch${i}`, ch, "yOff",  v=>(v>=0?"+":"")+v.toFixed(1));
-    // STRILLO is one knob: it sets the audible pitch AND the on-screen wave
-    // density (higher pitch → busier wave), so there's no separate FREQ control.
-    ch.freq = visCycles(ch.pitch);
-    document.getElementById(`sl-pitch-ch${i}`).addEventListener("input", e=>{
-      const p = parseFloat(e.target.value);
-      ch.freq = visCycles(p);
-      updatePartialAudio(i);            // repitch every partial of the bank
+    bindSlider(`sl-gain-ch${i}`, `v-gain-ch${i}`, ch, "gain", v=>"×"+v.toFixed(1));
+    bindSlider(`sl-yoff-ch${i}`, `v-yoff-ch${i}`, ch, "yOff", v=>(v>=0?"+":"")+v.toFixed(1));
+    // GUADAGNO is a real gain: also drive the per-channel srcGain node (audio)
+    document.getElementById(`sl-gain-ch${i}`).addEventListener("input", ()=>{
+      const c = AUDIO.chan[i];
+      if (c && c.srcGain) c.srcGain.gain.setTargetAtTime(ch.gain, AUDIO.ctx.currentTime, 0.02);
     });
 
     // swatches
