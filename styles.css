@@ -285,6 +285,65 @@ canvas {
 .seg button:active { transform: translate(2px,2px); box-shadow: none; }
 .seg button.active { background: var(--ink); color: var(--yellow); box-shadow: 2px 2px 0 #555; }
 
+/* ── OSCILLATOR BANK (per-channel additive editor) ── */
+.osc-bank {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.osc {
+  border: 2px solid var(--ink);
+  border-left-width: 6px;        /* coloured spine = the channel colour */
+  background: rgba(0,0,0,0.035);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.osc-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 24px;
+}
+
+.osc-title {
+  font-size: 9px;
+  letter-spacing: 1px;
+}
+
+.osc-del {
+  background: var(--white);
+  border: 2px solid var(--ink);
+  box-shadow: 2px 2px 0 var(--ink);
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 7px;
+  font-family: 'Press Start 2P', monospace;
+  color: var(--ink);
+  letter-spacing: 1px;
+  white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+}
+.osc-del:active { transform: translate(2px,2px); box-shadow: none; }
+
+.osc-add {
+  width: 100%;
+  padding: 11px;
+  cursor: pointer;
+  background: var(--white);
+  border: 2px dashed var(--ink);
+  font-family: 'Press Start 2P', monospace;
+  font-size: 8px;
+  letter-spacing: 1px;
+  -webkit-tap-highlight-color: transparent;
+}
+.osc-add:active { transform: translate(2px,2px); }
+
 /* ── SLIDER ── */
 .row-grid {
   display: grid;

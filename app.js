@@ -434,35 +434,39 @@ function setMode(m) {
     document.getElementById("axis-row-ch"+i).style.display = m==="xy"?"block":"none";
     document.getElementById("yoff-row-ch"+i).style.display = m==="xy"?"none":"flex";
   });
-  document.getElementById("combina-card").style.display = m==="xy"?"":"none";
   clearScreen();
 }
 
-// ── Per-channel additive oscillators (the modular core) ──────────────────────
-// Each synth channel is a stack of partials {ratio, amp, phase}. Lissajous = one
-// partial per channel at different pitches; spirograph = matching partials in
-// quadrature (X cos / Y sin). The editor lives in the channel card.
+// ── Per-channel additive oscillators (internal synth only) ───────────────────
+// Each synth channel is a stack of up to MAXPARTIALS partials {ratio, amp,
+// phase} you can add/remove to experiment. The editor lives in the channel card.
 function renderPartials(i) {
   const box = document.getElementById("osc-ch"+i);
   if (!box) return;
   const ch = CH[i], col = ch.color;
   let html = "";
   ch.partials.forEach((p,j) => {
-    html += `<div style="border-left:2px solid ${col}55;padding-left:6px;margin-top:6px">
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <span class="sl" style="font-size:8px;color:${col}">OSC ${j+1}</span>
-        ${j>0?`<button onclick="removePartial(${i},${j})" style="font-size:9px;line-height:1;background:none;border:1px solid #444;color:#999;border-radius:3px;padding:1px 6px;cursor:pointer">×</button>`:``}
+    html += `<div class="osc" style="border-left-color:${col}">
+      <div class="osc-head">
+        <span class="osc-title" style="color:${col}">OSC ${j+1}</span>
+        ${j>0?`<button class="osc-del" onclick="removePartial(${i},${j})" aria-label="Elimina oscillatore">RIMUOVI ✕</button>`:``}
       </div>
-      <div class="slider-meta"><span class="sl">RAPP</span><span class="sv" id="vp-${i}-${j}-ratio">${p.ratio.toFixed(2)}</span></div>
-      <input type="range" min="0.5" max="8" step="0.01" value="${p.ratio}" oninput="setPart(${i},${j},'ratio',this.value)">
-      <div class="slider-meta"><span class="sl">AMP</span><span class="sv" id="vp-${i}-${j}-amp">${p.amp.toFixed(2)}</span></div>
-      <input type="range" min="0" max="1" step="0.01" value="${p.amp}" oninput="setPart(${i},${j},'amp',this.value)">
-      <div class="slider-meta"><span class="sl">FASE</span><span class="sv" id="vp-${i}-${j}-phase">${p.phase.toFixed(2)}</span></div>
-      <input type="range" min="0" max="1" step="0.01" value="${p.phase}" oninput="setPart(${i},${j},'phase',this.value)">
+      <div class="slider-row">
+        <div class="slider-meta"><span class="sl">RAPPORTO</span><span class="sv" id="vp-${i}-${j}-ratio">${p.ratio.toFixed(2)}</span></div>
+        <input type="range" min="0.5" max="8" step="0.01" value="${p.ratio}" oninput="setPart(${i},${j},'ratio',this.value)">
+      </div>
+      <div class="slider-row">
+        <div class="slider-meta"><span class="sl">AMPIEZZA</span><span class="sv" id="vp-${i}-${j}-amp">${p.amp.toFixed(2)}</span></div>
+        <input type="range" min="0" max="1" step="0.01" value="${p.amp}" oninput="setPart(${i},${j},'amp',this.value)">
+      </div>
+      <div class="slider-row">
+        <div class="slider-meta"><span class="sl">FASE</span><span class="sv" id="vp-${i}-${j}-phase">${p.phase.toFixed(2)}</span></div>
+        <input type="range" min="0" max="1" step="0.01" value="${p.phase}" oninput="setPart(${i},${j},'phase',this.value)">
+      </div>
     </div>`;
   });
   if (ch.partials.length < MAXPARTIALS)
-    html += `<button onclick="addPartial(${i})" style="margin-top:6px;font-size:8px;letter-spacing:1px;background:none;border:1px dashed ${col}88;color:${col};border-radius:4px;padding:4px;cursor:pointer;width:100%">+ OSCILLATORE</button>`;
+    html += `<button class="osc-add" style="border-color:${col};color:${col}" onclick="addPartial(${i})">+ OSCILLATORE</button>`;
   box.innerHTML = html;
 }
 
@@ -470,69 +474,18 @@ function setPart(i,j,key,val) {
   CH[i].partials[j][key] = parseFloat(val);
   const el = document.getElementById(`vp-${i}-${j}-${key}`);
   if (el) el.textContent = parseFloat(val).toFixed(2);
-  updatePartialAudio(i); highlightPreset(null);
+  updatePartialAudio(i);
 }
 
 function addPartial(i) {
   if (CH[i].partials.length >= MAXPARTIALS) return;
   CH[i].partials.push({ ratio:CH[i].partials.length+1, amp:0.5, phase:0 });
-  buildChannelSynth(i); renderPartials(i); highlightPreset(null);
+  buildChannelSynth(i); renderPartials(i);
 }
 
 function removePartial(i,j) {
   CH[i].partials.splice(j,1);
-  buildChannelSynth(i); renderPartials(i); highlightPreset(null);
-}
-
-// quick-start figures (just configure pitches + partials of the two channels)
-function applyPreset(name) {
-  const P = {
-    lissajous:[[220,[{ratio:1,amp:1,phase:0}]],    [330,[{ratio:1,amp:1,phase:0.25}]]],
-    cerchio:  [[220,[{ratio:1,amp:1,phase:0.25}]], [220,[{ratio:1,amp:1,phase:0}]]],
-    spiro:    [[220,[{ratio:1,amp:0.6,phase:0.25},{ratio:4,amp:0.4,phase:0.25}]],
-               [220,[{ratio:1,amp:0.6,phase:0},   {ratio:4,amp:0.4,phase:0}]]],
-    reset:    [[220,[{ratio:1,amp:1,phase:0}]],    [330,[{ratio:1,amp:1,phase:0}]]],
-  }[name];
-  if (!P) return;
-  P.forEach(([pitch,parts],i)=>{
-    const ch=CH[i];
-    ch.pitch=pitch; ch.freq=visCycles(pitch);
-    ch.partials=parts.map(p=>({...p}));
-    const sl=document.getElementById(`sl-pitch-ch${i}`), vv=document.getElementById(`v-pitch-ch${i}`);
-    if (sl) sl.value=pitch; if (vv) vv.textContent=pitch.toFixed(0)+"Hz";
-    buildChannelSynth(i); renderPartials(i);
-  });
-  if (name==="reset") resetEverything();   // RESET wipes the per-channel synth params too
-  highlightPreset(name);          // light up the chosen preset button
-}
-
-// helper: set a slider's value + its readout label
-function setSliderUI(slId, vvId, val, fmt) {
-  const s=document.getElementById(slId), v=document.getElementById(vvId);
-  if (s) s.value=val; if (v) v.textContent=fmt(val);
-}
-
-// full reset of everything RESET should touch beyond the oscillators:
-// the per-channel synth params (amp, gain, offset, waveform)
-function resetEverything() {
-  [0,1].forEach(i=>{
-    const ch=CH[i];
-    ch.amp=0.75; ch.gain=2; ch.yOff=0; ch.waveform="sine";
-    setSliderUI(`sl-amp-ch${i}`,`v-amp-ch${i}`,0.75,v=>v.toFixed(2));
-    setSliderUI(`sl-gain-ch${i}`,`v-gain-ch${i}`,2,v=>"×"+v.toFixed(1));
-    setSliderUI(`sl-yoff-ch${i}`,`v-yoff-ch${i}`,0,v=>(v>=0?"+":"")+v.toFixed(1));
-    const seg=document.querySelector(`#synth-ch${i} .seg`);
-    if (seg) seg.querySelectorAll("button").forEach(b=>{
-      const a=b.dataset.w==="sine"; b.className=a?"active":""; applySegStyle(b,a,ch.color);
-    });
-    AUDIO.chan[i]?.parts.forEach(pt=>{ if(pt.osc) pt.osc.type="sine"; });
-  });
-}
-
-// mark one preset button active (or clear all when the user edits by hand)
-function highlightPreset(name) {
-  document.querySelectorAll("#preset-seg button").forEach(b =>
-    b.classList.toggle("active", b.dataset.preset===name));
+  buildChannelSynth(i); renderPartials(i);
 }
 
 // sync the toggle button, card opacity and LED to ch.enabled
@@ -745,7 +698,6 @@ window.addEventListener("load", ()=>{
       const p = parseFloat(e.target.value);
       ch.freq = visCycles(p);
       updatePartialAudio(i);            // repitch every partial of the bank
-      highlightPreset(null);
     });
 
     // swatches
