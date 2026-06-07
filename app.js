@@ -1085,4 +1085,66 @@ window.addEventListener("load", ()=>{
   setMode("wave");
 
   requestAnimationFrame(loop);
+  updateFavicon();   // fire-and-forget: fetches weather then redraws favicon
 });
+
+// ── Generative favicon ─────────────────────────────────────────────────────
+// Fetches current temperature + WMO weather code from Open-Meteo (no key).
+// Temperature → fill colour; weather code → waveform shape.
+// Geolocation with 4s timeout; falls back to Milan if denied or unavailable.
+async function updateFavicon() {
+  let lat = 45.46, lon = 9.19;   // fallback: Milan
+  try {
+    const pos = await new Promise((res, rej) =>
+      navigator.geolocation.getCurrentPosition(res, rej, { timeout:4000, maximumAge:3600000 }));
+    lat = pos.coords.latitude;
+    lon = pos.coords.longitude;
+  } catch(e) {}
+
+  let temp = 15, code = 0;
+  try {
+    const r = await fetch(
+      `https://api.open-meteo.com/v1/forecast?latitude=${lat.toFixed(2)}&longitude=${lon.toFixed(2)}&current=temperature_2m,weather_code&forecast_days=1`
+    );
+    const d = await r.json();
+    temp = d.current?.temperature_2m ?? 15;
+    code = d.current?.weather_code  ?? 0;
+  } catch(e) {}
+
+  // temperature → colour (cold=cyan → mild=green → hot=red)
+  const col = temp < 0  ? '#00cfff'
+            : temp < 10 ? '#44aaff'
+            : temp < 18 ? '#39ff14'
+            : temp < 25 ? '#ffdd00'
+            : temp < 32 ? '#ff6b35'
+            :             '#ff4444';
+
+  // WMO weather code → waveform shape
+  // 0=clear, 1-3=cloudy, 45-48=fog, 51-67=rain, 71-77=snow, 80-82=showers, 95-99=storm
+  const wf = code === 0 ? 'sine'
+           : code <=  3 ? 'sine'
+           : code <= 48 ? 'triangle'
+           : code <= 67 ? 'sawtooth'
+           : code <= 77 ? 'triangle'
+           : code <= 82 ? 'sawtooth'
+           :              'square';
+
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = 32;
+  const c2 = cv.getContext('2d');
+  c2.fillStyle = '#000'; c2.fillRect(0, 0, 32, 32);
+  c2.strokeStyle = col; c2.lineWidth = 2;
+  c2.shadowColor = col; c2.shadowBlur = 4;
+  c2.beginPath();
+  const fn = WF[wf];
+  for (let x = 0; x <= 32; x++) {
+    const y = 16 - fn(x / 32 * 2) * 11;   // 2 cycles, ±11px around centre
+    x === 0 ? c2.moveTo(x, y) : c2.lineTo(x, y);
+  }
+  c2.stroke();
+
+  let link = document.querySelector("link[rel='icon']");
+  if (!link) { link = document.createElement('link'); link.rel = 'icon'; document.head.appendChild(link); }
+  link.type = 'image/png';
+  link.href = cv.toDataURL('image/png');
+}
