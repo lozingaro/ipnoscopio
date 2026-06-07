@@ -711,16 +711,11 @@ function setColor(i, color) {
   // tint this channel's mixer strip name
   const mixName = document.getElementById("mixname-ch"+i);
   if (mixName) mixName.style.color = color;
-  // update slider accent
-  ["sl-gain-ch"+i,"sl-yoff-ch"+i].forEach(id=>{
-    const el = document.getElementById(id);
-    if (el) el.style.accentColor = color;
-  });
-  // update value displays
-  ["v-gain-ch"+i,"v-yoff-ch"+i].forEach(id=>{
-    const el = document.getElementById(id);
-    if (el) el.style.color = color;
-  });
+  // update slider accent (yoff only — gain is in the mixer, always red)
+  const yoffSl = document.getElementById("sl-yoff-ch"+i);
+  if (yoffSl) yoffSl.style.accentColor = color;
+  const yoffSv = document.getElementById("v-yoff-ch"+i);
+  if (yoffSv) yoffSv.style.color = color;
   renderPartials(i);    // recolor the oscillator editor accents
   updateLED(i);
 }

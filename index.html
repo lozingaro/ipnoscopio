@@ -78,11 +78,6 @@
       <select id="input-ch-ch0" class="input-device" style="margin-top:4px"></select>
     </div>
 
-    <div class="slider-row" id="gain-row-ch0">
-      <div class="slider-meta"><span class="sl">GUADAGNO</span><span class="sv" id="v-gain-ch0">×1.0</span></div>
-      <input type="range" id="sl-gain-ch0" min="0.1" max="10" step="0.1" value="1" data-default="1" data-snap="step:1">
-    </div>
-
     <div class="subpanel">
       <span class="subpanel-label">VISIVO</span>
       <div class="slider-row" id="yoff-row-ch0">
@@ -132,11 +127,6 @@
       <select id="input-ch-ch1" class="input-device" style="margin-top:4px"></select>
     </div>
 
-    <div class="slider-row" id="gain-row-ch1">
-      <div class="slider-meta"><span class="sl">GUADAGNO</span><span class="sv" id="v-gain-ch1">×1.0</span></div>
-      <input type="range" id="sl-gain-ch1" min="0.1" max="10" step="0.1" value="1" data-default="1" data-snap="step:1">
-    </div>
-
     <div class="subpanel">
       <span class="subpanel-label">VISIVO</span>
       <div class="slider-row" id="yoff-row-ch1">
@@ -164,28 +154,42 @@
     <div class="mix-strip mix-master">
       <div class="mix-head">
         <span class="mix-name">MASTER</span>
-        <span class="sv" id="vv-master">0.70</span>
         <button class="mix-mute" id="mute-master" onclick="mixMasterMute()">SUONA</button>
       </div>
-      <input type="range" id="vol-master" min="0" max="1" step="0.01" value="0.7">
+      <div class="slider-row">
+        <div class="slider-meta"><span class="sl mix-sl">VOLUME</span><span class="sv mix-sv" id="vv-master">0.70</span></div>
+        <input type="range" id="vol-master" min="0" max="1" step="0.01" value="0.7">
+      </div>
     </div>
 
     <div class="mix-strip">
       <div class="mix-head">
         <span class="mix-name" id="mixname-ch0">CANALE UNO · L</span>
-        <span class="sv" id="vv-ch0">0.60</span>
         <button class="mix-mute muted" id="mute-ch0" onclick="mixChanMute(0)">ZITTO</button>
       </div>
-      <input type="range" id="vol-ch0" min="0" max="1" step="0.01" value="0.6">
+      <div class="slider-row">
+        <div class="slider-meta"><span class="sl mix-sl">GUADAGNO</span><span class="sv mix-sv" id="v-gain-ch0">×1.0</span></div>
+        <input type="range" id="sl-gain-ch0" min="0.1" max="10" step="0.1" value="1" data-default="1" data-snap="step:1">
+      </div>
+      <div class="slider-row">
+        <div class="slider-meta"><span class="sl mix-sl">VOLUME</span><span class="sv mix-sv" id="vv-ch0">0.60</span></div>
+        <input type="range" id="vol-ch0" min="0" max="1" step="0.01" value="0.6">
+      </div>
     </div>
 
     <div class="mix-strip">
       <div class="mix-head">
         <span class="mix-name" id="mixname-ch1">CANALE DUE · R</span>
-        <span class="sv" id="vv-ch1">0.60</span>
         <button class="mix-mute muted" id="mute-ch1" onclick="mixChanMute(1)">ZITTO</button>
       </div>
-      <input type="range" id="vol-ch1" min="0" max="1" step="0.01" value="0.6">
+      <div class="slider-row">
+        <div class="slider-meta"><span class="sl mix-sl">GUADAGNO</span><span class="sv mix-sv" id="v-gain-ch1">×1.0</span></div>
+        <input type="range" id="sl-gain-ch1" min="0.1" max="10" step="0.1" value="1" data-default="1" data-snap="step:1">
+      </div>
+      <div class="slider-row">
+        <div class="slider-meta"><span class="sl mix-sl">VOLUME</span><span class="sv mix-sv" id="vv-ch1">0.60</span></div>
+        <input type="range" id="vol-ch1" min="0" max="1" step="0.01" value="0.6">
+      </div>
     </div>
   </div>
 
