@@ -121,6 +121,23 @@ function updatePartialAudio(i) {
   });
 }
 
+// Some browsers keep a fresh AudioContext suspended until a real gesture — and a
+// few only route output to the speakers after the first media interaction (which
+// is why the synth used to go silent until a mic was opened). Unlock on the first
+// interaction anywhere: create + resume the context and play a 1-sample silent
+// buffer to kick the output path awake.
+function unlockAudio() {
+  const ctx = ensureAudio();
+  if (ctx.state === "suspended") ctx.resume();
+  if (!unlockAudio.kicked) {
+    try {
+      const b = ctx.createBuffer(1, 1, ctx.sampleRate);
+      const s = ctx.createBufferSource(); s.buffer = b; s.connect(ctx.destination); s.start(0);
+    } catch(e){}
+    unlockAudio.kicked = true;
+  }
+}
+
 // Connect the node matching the channel's current source to its GUADAGNO node
 // (srcGain → mixer gain), detaching any previously-connected source first.
 function routeChannel(i) {
@@ -783,6 +800,10 @@ function enhanceSliders(root) {
 window.addEventListener("load", ()=>{
   initCanvas();
   new ResizeObserver(initCanvas).observe(canvas);
+
+  // wake/keep the audio output alive from the very first interaction anywhere
+  ["pointerdown","touchstart","keydown"].forEach(ev =>
+    document.addEventListener(ev, unlockAudio, { passive:true }));
 
   // per-channel line-input pickers: a device chooser (shared device, reopens for
   // everyone) + an input chooser (which input of the device this channel reads)
