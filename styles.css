@@ -552,6 +552,7 @@ input[type=range]::-moz-range-thumb { width: 24px; height: 24px; background: var
 .mix-sv { color: #fff !important; }
 
 .mix-mute {
+  margin-left: auto;
   background: var(--white);
   border: var(--border);
   box-shadow: 2px 2px 0 var(--ink);
