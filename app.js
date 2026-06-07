@@ -26,10 +26,10 @@ function findTrigger(buf, level, hyst=0.02) {
 const G = { timebase:1, noise:0, trig:0, mode:"wave", running:true };
 
 const CH = [
-  { enabled:true, src:"synth", waveform:"sine", gain:1, yOff:0, color:"#39ff14", axis:"x",
+  { enabled:true, src:"synth", waveform:"sine", gain:1, yOff:0, color:"#39ff14", axis:"x", inputCh:0,
     partials:[{freq:220, amp:1, phase:0}],
     stream:null, micNode:null, analyser:null, micBuf:null, micOk:false },
-  { enabled:true, src:"synth", waveform:"sine", gain:1, yOff:0, color:"#00cfff", axis:"y",
+  { enabled:true, src:"synth", waveform:"sine", gain:1, yOff:0, color:"#00cfff", axis:"y", inputCh:1,
     partials:[{freq:330, amp:1, phase:0}],
     stream:null, micNode:null, analyser:null, micBuf:null, micOk:false },
 ];
@@ -129,10 +129,10 @@ function routeChannel(i) {
   const sg = c.srcGain;
   try { c.synthSum?.disconnect(sg); }    catch(e){}
   try { CH[i].micNode?.disconnect(sg); } catch(e){}
-  try { INPUT.tap[i]?.disconnect(sg); }  catch(e){}
+  INPUT.tap.forEach(t => { try { t?.disconnect(sg); } catch(e){} });
   if      (CH[i].src === "synth") c.synthSum?.connect(sg);
   else if (CH[i].src === "mic")   CH[i].micNode?.connect(sg);
-  else if (CH[i].src === "input") INPUT.tap[i]?.connect(sg);
+  else if (CH[i].src === "input") INPUT.tap[CH[i].inputCh]?.connect(sg);
 }
 
 function applyChan(i) {
@@ -349,33 +349,38 @@ function stopMic(ch) {
   ch.stream=null; ch.micNode=null; ch.analyser=null; ch.micBuf=null; ch.micOk=false;
 }
 
-// ── Line input (audio interface): ONE stereo stream, split L→CH1, R→CH2 ───────
+// ── Line input (audio interface): ONE shared stream, split into N device inputs.
+// Each channel picks WHICH input (CH[i].inputCh) to read for both scope + monitor.
 const INPUT = {
-  stream:null, source:null, splitter:null, deviceId:null,
-  analyser:[null,null], buf:[null,null], tap:[null,null],
+  stream:null, source:null, splitter:null, deviceId:null, n:0,
+  analyser:[], buf:[], tap:[],
 };
 
-// open (or reopen) the chosen input device as a clean stereo line source
+// open (or reopen) the chosen input device, splitting all its input channels
 async function startInput(deviceId) {
   const ctx = ensureAudio();
   if (ctx.state==="suspended") await ctx.resume();
   stopInputStream();
-  const audio = { echoCancellation:false, noiseSuppression:false, autoGainControl:false, channelCount:2 };
+  const audio = { echoCancellation:false, noiseSuppression:false, autoGainControl:false, channelCount:{ ideal:8 } };
   if (deviceId) audio.deviceId = { exact: deviceId };
   let stream;
   try { stream = await navigator.mediaDevices.getUserMedia({ audio }); }
   catch(e) { console.warn("Input:", e.name, e.message); return false; }
+  const track = stream.getAudioTracks()[0];
+  const n = Math.max(1, Math.min(8, (track.getSettings && track.getSettings().channelCount) || 2));
   INPUT.stream = stream;
   INPUT.deviceId = deviceId || null;
+  INPUT.n = n;
   INPUT.source = ctx.createMediaStreamSource(stream);
-  INPUT.splitter = ctx.createChannelSplitter(2);
+  INPUT.splitter = ctx.createChannelSplitter(n);
   INPUT.source.connect(INPUT.splitter);
-  for (let i=0;i<2;i++) {
+  INPUT.analyser = []; INPUT.buf = []; INPUT.tap = [];
+  for (let k=0;k<n;k++) {
     const a = ctx.createAnalyser(); a.fftSize=2048; a.smoothingTimeConstant=0;
-    INPUT.splitter.connect(a, i);                 // scope tap (L=0 → CH1, R=1 → CH2)
-    INPUT.analyser[i] = a; INPUT.buf[i] = new Float32Array(2048);
-    const g = ctx.createGain(); INPUT.splitter.connect(g, i);  // mixer monitor tap
-    INPUT.tap[i] = g;
+    INPUT.splitter.connect(a, k);                 // scope tap for device input k
+    INPUT.analyser[k] = a; INPUT.buf[k] = new Float32Array(2048);
+    const g = ctx.createGain(); INPUT.splitter.connect(g, k);  // mixer monitor tap
+    INPUT.tap[k] = g;
   }
   return true;
 }
@@ -385,37 +390,56 @@ function stopInputStream() {
   try { INPUT.source?.disconnect(); } catch(e){}
   try { INPUT.splitter?.disconnect(); } catch(e){}
   INPUT.tap.forEach(g => { try { g?.disconnect(); } catch(e){} });
-  INPUT.stream=INPUT.source=INPUT.splitter=null;
-  INPUT.analyser=[null,null]; INPUT.buf=[null,null]; INPUT.tap=[null,null];
+  INPUT.stream=INPUT.source=INPUT.splitter=null; INPUT.n=0;
+  INPUT.analyser=[]; INPUT.buf=[]; INPUT.tap=[];
 }
 
 // detach one channel from the line input; stop the stream if nobody else needs it
 function detachInput(i) {
-  try { INPUT.tap[i]?.disconnect(AUDIO.chan[i].gain); } catch(e){}
+  const sg = AUDIO.chan[i]?.srcGain;
+  INPUT.tap.forEach(t => { try { t?.disconnect(sg); } catch(e){} });
   CH[i].analyser=null; CH[i].micBuf=null;
   const other = i===0?1:0;
-  if (CH[other].src!=="input") {
-    stopInputStream();
-    const card = document.getElementById("input-card");
-    if (card) card.style.display="none";
-  }
+  if (CH[other].src!=="input") stopInputStream();
 }
 
-// fill the device dropdown (labels need a granted permission, so call after start)
-async function populateInputDevices() {
+// point a channel at its chosen device input (clamped to what the device offers)
+function applyInputChannel(i) {
+  const k = Math.min(CH[i].inputCh, Math.max(0, INPUT.n-1));
+  CH[i].inputCh = k;
+  CH[i].analyser = INPUT.analyser[k] || null;
+  CH[i].micBuf   = INPUT.buf[k] || null;
+  routeChannel(i);
+}
+
+// fill a channel's device dropdown (labels need a granted permission)
+async function populateInputDevices(i) {
   try {
     const devs = await navigator.mediaDevices.enumerateDevices();
-    const sel = document.getElementById("input-device");
+    const sel = document.getElementById("input-device-ch"+i);
     if (!sel) return;
     sel.innerHTML = "";
     devs.filter(d=>d.kind==="audioinput").forEach((d,idx)=>{
       const o = document.createElement("option");
       o.value = d.deviceId;
-      o.textContent = d.label || ("Ingresso "+(idx+1));
+      o.textContent = d.label || ("Dispositivo "+(idx+1));
       sel.appendChild(o);
     });
     if (INPUT.deviceId) sel.value = INPUT.deviceId;
   } catch(e) { console.warn(e); }
+}
+
+// fill a channel's input-selector with the device's available inputs
+function populateInputChannels(i) {
+  const sel = document.getElementById("input-ch-ch"+i);
+  if (!sel) return;
+  sel.innerHTML = "";
+  for (let k=0;k<Math.max(1,INPUT.n);k++) {
+    const o = document.createElement("option");
+    o.value = k; o.textContent = "Ingresso "+(k+1);
+    sel.appendChild(o);
+  }
+  sel.value = Math.min(CH[i].inputCh, Math.max(0, INPUT.n-1));
 }
 
 
@@ -519,6 +543,7 @@ function updateSrcUI(i, val) {
     b.style.borderColor = a?ch.color:"#2a2a2a";
   });
   document.getElementById("synth-ch"+i).style.display = val==="synth"?"block":"none";
+  document.getElementById("line-ch"+i).style.display  = val==="input"?"block":"none";
   // GUADAGNO (real per-channel gain) applies to every source → always visible
 }
 
@@ -540,13 +565,11 @@ async function setSrc(i, btn) {
       const ok = await startInput(INPUT.deviceId);
       if (!ok) { alert("Ingresso audio non disponibile o negato"); return; }
     }
-    await populateInputDevices();
-    const card = document.getElementById("input-card");
-    if (card) card.style.display = "";
     ch.src = "input";
-    ch.analyser = INPUT.analyser[i];      // L → CH1, R → CH2
-    ch.micBuf = INPUT.buf[i];
     AUDIO.chan[i].mute = true;            // monitor muted by default → no feedback
+    await populateInputDevices(i);
+    populateInputChannels(i);
+    applyInputChannel(i);                 // point this channel at its chosen input
   } else {
     ch.src = "synth";
     ch.analyser = null; ch.micBuf = null;
@@ -689,16 +712,20 @@ window.addEventListener("load", ()=>{
   initCanvas();
   new ResizeObserver(initCanvas).observe(canvas);
 
-  // line-input device picker: switch interface and re-point the active channels
-  document.getElementById("input-device").addEventListener("change", async e=>{
-    const ok = await startInput(e.target.value);
-    if (!ok) return;
-    [0,1].forEach(i => {
-      if (CH[i].src==="input") {
-        CH[i].analyser = INPUT.analyser[i];
-        CH[i].micBuf = INPUT.buf[i];
-        routeChannel(i);
-      }
+  // per-channel line-input pickers: a device chooser (shared device, reopens for
+  // everyone) + an input chooser (which input of the device this channel reads)
+  [0,1].forEach(i=>{
+    document.getElementById("input-device-ch"+i).addEventListener("change", async e=>{
+      const ok = await startInput(e.target.value);
+      if (!ok) return;
+      [0,1].forEach(j=>{
+        populateInputDevices(j); populateInputChannels(j);
+        if (CH[j].src==="input") applyInputChannel(j);
+      });
+    });
+    document.getElementById("input-ch-ch"+i).addEventListener("change", e=>{
+      CH[i].inputCh = parseInt(e.target.value,10) || 0;
+      applyInputChannel(i);
     });
   });
 
