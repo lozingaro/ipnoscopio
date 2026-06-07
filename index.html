@@ -40,27 +40,11 @@
 
 <div id="controls">
 
-  <!-- X-Y combination panel (shown in X VS Y mode) -->
-  <div class="ch-card" id="combina-card" style="display:none; background:var(--cyan)">
-    <span class="section-label">COMBINA X-Y</span>
-    <p style="font-size:8px; line-height:1.7; color:var(--ink)">
-      La figura X-Y nasce dai due canali: ognuno è uno stack di OSCILLATORI (vedi
-      le card canale). Lissajous = 1 oscillatore per canale a frequenze diverse;
-      spirografo = oscillatori abbinati in quadratura. Parti da un preset e gioca.
-    </p>
-    <div class="seg" id="preset-seg" style="margin-top:0">
-      <button data-preset="lissajous" onclick="applyPreset('lissajous')">LISSAJOUS</button>
-      <button data-preset="cerchio" onclick="applyPreset('cerchio')">CERCHIO</button>
-      <button data-preset="spiro" onclick="applyPreset('spiro')">SPIRO</button>
-      <button data-preset="reset" onclick="applyPreset('reset')">RESET</button>
-    </div>
-  </div>
-
   <!-- Line input device picker (shown only when a channel uses LINEA) -->
   <div class="ch-card" id="input-card" style="display:none; background:var(--cyan)">
     <span class="section-label">INGRESSO LINEA</span>
     <p style="font-size:8px; line-height:1.7; color:var(--ink)">
-      Interfaccia audio: il canale SINISTRO va su CANALE 1, il DESTRO su CANALE 2.
+      Interfaccia audio: il canale SINISTRO va su CANALE UNO · L, il DESTRO su CANALE DUE · R.
       Collega il synth e scegli l'ingresso qui sotto.
     </p>
     <select id="input-device" class="input-device"></select>
@@ -70,7 +54,7 @@
   <div class="ch-card" id="card-ch0">
     <div class="ch-header">
       <div class="ch-dot" id="dot-ch0"></div>
-      <span class="ch-name" id="name-ch0">CANALE 1</span>
+      <span class="ch-name" id="name-ch0">CANALE UNO · L</span>
       <button class="ch-toggle on" id="toggle-ch0" onclick="toggleCh(0)">ON</button>
     </div>
 
@@ -92,7 +76,7 @@
         <button data-w="triangle" onclick="setWave(0,this)">TRIANGOLO</button>
       </div>
       <span class="sl" style="font-size:9px;letter-spacing:1px;color:#444;display:block;margin-top:8px">OSCILLATORI</span>
-      <div id="osc-ch0"></div>
+      <div id="osc-ch0" class="osc-bank"></div>
     </div>
 
     <div class="row-grid">
@@ -132,7 +116,7 @@
   <div class="ch-card ch-odd" id="card-ch1">
     <div class="ch-header">
       <div class="ch-dot" id="dot-ch1"></div>
-      <span class="ch-name" id="name-ch1">CANALE 2</span>
+      <span class="ch-name" id="name-ch1">CANALE DUE · R</span>
       <button class="ch-toggle on" id="toggle-ch1" onclick="toggleCh(1)">ON</button>
     </div>
 
@@ -154,7 +138,7 @@
         <button data-w="triangle" onclick="setWave(1,this)">TRIANGOLO</button>
       </div>
       <span class="sl" style="font-size:9px;letter-spacing:1px;color:#444;display:block;margin-top:8px">OSCILLATORI</span>
-      <div id="osc-ch1"></div>
+      <div id="osc-ch1" class="osc-bank"></div>
     </div>
 
     <div class="row-grid">
@@ -205,7 +189,7 @@
 
     <div class="mix-strip">
       <div class="mix-head">
-        <span class="mix-name" id="mixname-ch0">CANALE 1</span>
+        <span class="mix-name" id="mixname-ch0">CANALE UNO · L</span>
         <span class="sv" id="vv-ch0">0.60</span>
         <button class="mix-mute muted" id="mute-ch0" onclick="mixChanMute(0)">ZITTO</button>
       </div>
@@ -214,7 +198,7 @@
 
     <div class="mix-strip">
       <div class="mix-head">
-        <span class="mix-name" id="mixname-ch1">CANALE 2</span>
+        <span class="mix-name" id="mixname-ch1">CANALE DUE · R</span>
         <span class="sv" id="vv-ch1">0.60</span>
         <button class="mix-mute muted" id="mute-ch1" onclick="mixChanMute(1)">ZITTO</button>
       </div>
