@@ -1183,8 +1183,8 @@ async function updateFavicon() {
     const W = hw.width, H = hw.height;
     const hc = hw.getContext('2d');
     hc.clearRect(0, 0, W, H);
-    hc.strokeStyle = col; hc.lineWidth = 1.5;
-    hc.shadowColor = col; hc.shadowBlur = 2;
+    hc.strokeStyle = col; hc.lineWidth = 4;
+    hc.shadowColor = col; hc.shadowBlur = 6;
     hc.beginPath();
     for (let x = 0; x <= W; x++) {
       const y = H / 2 - fn(x / W * 2) * (H / 2 - 1);
