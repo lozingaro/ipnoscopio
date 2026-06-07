@@ -62,7 +62,7 @@ const oscType = wf => wf;
 
 // Create the shared context + graph on first use (must run inside a user gesture).
 function ensureAudio() {
-  if (AUDIO.ctx) { if (AUDIO.ctx.state==="suspended") AUDIO.ctx.resume(); return AUDIO.ctx; }
+  if (AUDIO.ctx) { return AUDIO.ctx; }
   const ctx = new (window.AudioContext||window.webkitAudioContext)();
   AUDIO.ctx = ctx;
   AUDIO.master = ctx.createGain();
@@ -128,7 +128,7 @@ function updatePartialAudio(i) {
 // buffer to kick the output path awake.
 function unlockAudio() {
   const ctx = ensureAudio();
-  if (ctx.state === "suspended") ctx.resume();
+  if (G.running && ctx.state === "suspended") ctx.resume();
   if (!unlockAudio.kicked) {
     try {
       const b = ctx.createBuffer(1, 1, ctx.sampleRate);
