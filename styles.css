@@ -258,10 +258,10 @@ canvas {
 .ch-card {
   border: var(--border);
   box-shadow: var(--shadow);
-  padding: 10px;
+  padding: 12px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 14px;
   background: var(--white);
 }
 
@@ -443,21 +443,38 @@ input[type=range]::-webkit-slider-thumb {
 input[type=range]::-moz-range-track { height: 10px; background: var(--ink); border: 2px solid var(--ink); }
 input[type=range]::-moz-range-thumb { width: 24px; height: 24px; background: var(--yellow); border: 3px solid var(--ink); border-radius: 0; }
 
-/* LFO toggle button (per-parameter, inside slider-meta) */
-.lfo-btn {
-  font-family: 'Press Start 2P', monospace;
-  font-size: 6px;
-  padding: 2px 5px;
-  border: 1px solid #444;
-  background: transparent;
-  color: #555;
-  cursor: pointer;
-  line-height: 1;
-  letter-spacing: 1px;
-  -webkit-tap-highlight-color: transparent;
-  flex-shrink: 0;
+/* LFO sub-slider (below each oscillator parameter) */
+.lfo-row {
+  padding-left: 8px;
+  border-left: 2px solid rgba(255,255,255,0.15);
+  margin-top: -4px;
 }
-.lfo-btn:active { opacity: 0.6; }
+.lfo-sl {
+  font-size: 6px !important;
+  color: #666 !important;
+  letter-spacing: 1px;
+}
+.lfo-sv {
+  font-size: 7px !important;
+  color: #666;
+}
+.lfo-range {
+  height: 22px !important;
+}
+.lfo-range::-webkit-slider-runnable-track {
+  height: 5px !important;
+  background: #444 !important;
+  border-color: #444 !important;
+}
+.lfo-range::-webkit-slider-thumb {
+  width: 16px !important;
+  height: 16px !important;
+  background: #aaa !important;
+  border-width: 2px !important;
+  margin-top: -7px !important;
+}
+.lfo-range::-moz-range-track { height: 5px !important; background: #444 !important; border-color: #444 !important; }
+.lfo-range::-moz-range-thumb { width: 14px !important; height: 14px !important; background: #aaa !important; }
 
 /* editable readout: click the number to type an exact value */
 .slider-meta .sv, .mix-head .sv { cursor: text; }
@@ -541,8 +558,8 @@ input[type=range]::-moz-range-thumb { width: 24px; height: 24px; background: var
 #btn-clr:active { transform: translate(4px,4px); box-shadow: none; }
 
 /* ── MIXER ── */
-.mix-strip { display: flex; flex-direction: column; gap: 5px; }
-.mix-strip + .mix-strip { border-top: 2px solid rgba(0,0,0,0.25); padding-top: 8px; }
+.mix-strip { display: flex; flex-direction: column; gap: 8px; }
+.mix-strip + .mix-strip { border-top: 2px solid rgba(0,0,0,0.25); padding-top: 14px; margin-top: 6px; }
 
 .mix-head { display: flex; align-items: center; gap: 8px; }
 .mix-name { font-size: 8px; color: #fff; letter-spacing: 1px; }

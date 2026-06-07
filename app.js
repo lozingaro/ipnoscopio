@@ -27,17 +27,16 @@ const G = { timebase:1, noise:0, trig:0, mode:"wave", running:true };
 
 const CH = [
   { enabled:true, src:"synth", gain:1, yOff:0, color:"#39ff14", axis:"x", inputCh:0,
-    partials:[{freq:220, amp:1, phase:0, waveform:"sine", lfo:{freq:false,amp:false,phase:false}}],
+    partials:[{freq:220, amp:1, phase:0, waveform:"sine", lfo:{freq:0,amp:0,phase:0}}],
     stream:null, micNode:null, analyser:null, micBuf:null, micOk:false },
   { enabled:true, src:"synth", gain:1, yOff:0, color:"#00cfff", axis:"y", inputCh:1,
-    partials:[{freq:330, amp:1, phase:0, waveform:"sine", lfo:{freq:false,amp:false,phase:false}}],
+    partials:[{freq:330, amp:1, phase:0, waveform:"sine", lfo:{freq:0,amp:0,phase:0}}],
     stream:null, micNode:null, analyser:null, micBuf:null, micOk:false },
 ];
 const MAXPARTIALS = 4;
 const CYCLE_HZ = 55;     // Hz that map to one on-screen cycle (visual scaling only)
 
-const LFO_RATE  = 2;                                // Hz — preset
-const LFO_DEPTH = { freq: 0.15, amp: 0.6, phase: 0.5 };
+const LFO_DEPTH = { freq: 0.15, amp: 0.6, phase: 0.5 };  // modulation depth, preset
 // keep the additive sum bounded to -1..1 regardless of how many partials are on
 const partNorm = ch => 1/Math.max(1, ch.partials.reduce((s,p)=>s+p.amp,0));
 
@@ -227,11 +226,14 @@ let t0=0;
 // Each oscillator: freq (Hz, drawn as freq/CYCLE_HZ cycles), amp, phase (0..1).
 function synthAt(ch, u) {
   let s = 0;
-  const lfoSin = Math.sin(2 * Math.PI * LFO_RATE * t0 * 0.001);
+  const tsec = t0 * 0.001;
   for (const o of ch.partials) {
-    const freq  = o.freq  * (1 + (o.lfo.freq  ? lfoSin * LFO_DEPTH.freq  : 0));
-    const amp   = Math.max(0, o.amp * (1 + (o.lfo.amp   ? lfoSin * LFO_DEPTH.amp   : 0)));
-    const phase = o.phase + (o.lfo.phase ? lfoSin * LFO_DEPTH.phase : 0);
+    const lfoF = o.lfo.freq  > 0 ? Math.sin(2*Math.PI * o.lfo.freq  * tsec) : 0;
+    const lfoA = o.lfo.amp   > 0 ? Math.sin(2*Math.PI * o.lfo.amp   * tsec) : 0;
+    const lfoP = o.lfo.phase > 0 ? Math.sin(2*Math.PI * o.lfo.phase * tsec) : 0;
+    const freq  = o.freq  * (1 + lfoF * LFO_DEPTH.freq);
+    const amp   = Math.max(0, o.amp * (1 + lfoA * LFO_DEPTH.amp));
+    const phase = o.phase + lfoP * LFO_DEPTH.phase;
     s += amp * WF[o.waveform](freq/CYCLE_HZ*u + phase);
   }
   return s * partNorm(ch);
@@ -328,17 +330,24 @@ function paintXY(pts, colA, colB) {
 // ── Audio LFO (frame-rate updates to AudioParams) ──────────────────────────
 function updateAudioLFOs(ts) {
   if (!AUDIO.ctx) return;
-  const lfoSin = Math.sin(2 * Math.PI * LFO_RATE * ts * 0.001);
-  const t = AUDIO.ctx.currentTime;
+  const t = AUDIO.ctx.currentTime, tsec = ts * 0.001;
   CH.forEach((ch, i) => {
     if (ch.src !== "synth") return;
-    const c = AUDIO.chan[i];
-    const norm = partNorm(ch);
+    const c = AUDIO.chan[i], norm = partNorm(ch);
     ch.partials.forEach((p, j) => {
       const pt = c.parts[j]; if (!pt) return;
-      if (p.lfo.freq)  pt.osc.frequency.setTargetAtTime(p.freq * (1 + lfoSin * LFO_DEPTH.freq), t, 0.005);
-      if (p.lfo.amp)   pt.gain.gain.setTargetAtTime(Math.max(0, p.amp * (1 + lfoSin * LFO_DEPTH.amp)) * norm, t, 0.005);
-      if (p.lfo.phase) pt.delay.delayTime.setTargetAtTime((p.phase + lfoSin * LFO_DEPTH.phase) / Math.max(1, p.freq), t, 0.005);
+      if (p.lfo.freq > 0) {
+        const s = Math.sin(2*Math.PI * p.lfo.freq * tsec);
+        pt.osc.frequency.setTargetAtTime(p.freq * (1 + s * LFO_DEPTH.freq), t, 0.005);
+      }
+      if (p.lfo.amp > 0) {
+        const s = Math.sin(2*Math.PI * p.lfo.amp * tsec);
+        pt.gain.gain.setTargetAtTime(Math.max(0, p.amp * (1 + s * LFO_DEPTH.amp)) * norm, t, 0.005);
+      }
+      if (p.lfo.phase > 0) {
+        const s = Math.sin(2*Math.PI * p.lfo.phase * tsec);
+        pt.delay.delayTime.setTargetAtTime((p.phase + s * LFO_DEPTH.phase) / Math.max(1, p.freq), t, 0.005);
+      }
     });
   });
 }
@@ -516,12 +525,14 @@ function setMode(m) {
 // phase} you can add/remove to experiment. The editor lives in the channel card.
 const WF_LABELS = { sine:"SENO", square:"QUADRA", sawtooth:"DENTE", triangle:"TRIANGOLO" };
 
-function lfoBtn(i, j, key, active, col) {
-  const bg  = active ? col : "transparent";
-  const clr = active ? "#000" : "#555";
-  const bdr = active ? col : "#444";
-  const sh  = active ? `0 0 5px ${col}` : "none";
-  return `<button class="lfo-btn" style="background:${bg};color:${clr};border-color:${bdr};box-shadow:${sh}" onclick="toggleLfo(${i},${j},'${key}')">LFO</button>`;
+function lfoSlider(i, j, key, rate, col) {
+  const active = rate > 0;
+  const valTxt = active ? rate.toFixed(1)+'Hz' : 'OFF';
+  const valStyle = active ? `style="color:${col}"` : '';
+  return `<div class="slider-row lfo-row">
+      <div class="slider-meta"><span class="sl lfo-sl">~ LFO</span><span class="sv lfo-sv" id="vp-${i}-${j}-lfo-${key}" ${valStyle}>${valTxt}</span></div>
+      <input type="range" class="lfo-range" min="0" max="10" step="0.1" value="${rate}" data-default="0" oninput="setLfoParam(${i},${j},'${key}',this.value)">
+    </div>`;
 }
 
 function renderPartials(i) {
@@ -541,39 +552,45 @@ function renderPartials(i) {
       </div>
       <div class="seg" style="margin-bottom:6px">${wfBtns}</div>
       <div class="slider-row">
-        <div class="slider-meta"><span class="sl">FREQUENZA</span>${lfoBtn(i,j,'freq',p.lfo.freq,col)}<span class="sv" id="vp-${i}-${j}-freq">${Math.round(p.freq)}Hz</span></div>
+        <div class="slider-meta"><span class="sl">FREQUENZA</span><span class="sv" id="vp-${i}-${j}-freq">${Math.round(p.freq)}Hz</span></div>
         <input type="range" min="20" max="2000" step="1" value="${p.freq}" data-default="220" data-snap="step:55" oninput="setPart(${i},${j},'freq',this.value)">
       </div>
+      ${lfoSlider(i,j,'freq',p.lfo.freq,col)}
       <div class="slider-row">
-        <div class="slider-meta"><span class="sl">AMPIEZZA</span>${lfoBtn(i,j,'amp',p.lfo.amp,col)}<span class="sv" id="vp-${i}-${j}-amp">${p.amp.toFixed(2)}</span></div>
+        <div class="slider-meta"><span class="sl">AMPIEZZA</span><span class="sv" id="vp-${i}-${j}-amp">${p.amp.toFixed(2)}</span></div>
         <input type="range" min="0" max="1" step="0.01" value="${p.amp}" data-default="1" data-snap="0,0.25,0.5,0.75,1" oninput="setPart(${i},${j},'amp',this.value)">
       </div>
+      ${lfoSlider(i,j,'amp',p.lfo.amp,col)}
       <div class="slider-row">
-        <div class="slider-meta"><span class="sl">FASE</span>${lfoBtn(i,j,'phase',p.lfo.phase,col)}<span class="sv" id="vp-${i}-${j}-phase">${(p.phase*2).toFixed(2)}π</span></div>
+        <div class="slider-meta"><span class="sl">FASE</span><span class="sv" id="vp-${i}-${j}-phase">${(p.phase*2).toFixed(2)}π</span></div>
         <input type="range" min="0" max="2" step="0.01" value="${(p.phase*2).toFixed(2)}" data-default="0" data-snap="0,0.5,1,1.5,2" oninput="setPart(${i},${j},'phase',this.value)">
       </div>
+      ${lfoSlider(i,j,'phase',p.lfo.phase,col)}
     </div>`;
   });
   if (ch.partials.length < MAXPARTIALS)
     html += `<button class="osc-add" style="border-color:${col};color:${col}" onclick="addPartial(${i})">+ OSCILLATORE</button>`;
   box.innerHTML = html;
-  enhanceSliders(box);     // editable values + snap + double-tap reset
+  enhanceSliders(box);
 }
 
-function toggleLfo(i, j, key) {
-  const p = CH[i].partials[j];
-  p.lfo[key] = !p.lfo[key];
-  if (!p.lfo[key]) {
-    // restore base value when deactivated
-    const pt = AUDIO.chan[i]?.parts[j];
+function setLfoParam(i, j, key, val) {
+  const v = parseFloat(val);
+  CH[i].partials[j].lfo[key] = v;
+  const el = document.getElementById(`vp-${i}-${j}-lfo-${key}`);
+  if (el) {
+    el.textContent = v === 0 ? 'OFF' : v.toFixed(1)+'Hz';
+    el.style.color = v === 0 ? '' : CH[i].color;
+  }
+  if (v === 0) {
+    const pt = AUDIO.chan[i]?.parts[j], p = CH[i].partials[j];
     if (pt && AUDIO.ctx) {
       const norm = partNorm(CH[i]), t = AUDIO.ctx.currentTime;
-      if (key === 'freq')  pt.osc.frequency.setTargetAtTime(p.freq, t, 0.02);
-      if (key === 'amp')   pt.gain.gain.setTargetAtTime(p.amp * norm, t, 0.02);
-      if (key === 'phase') pt.delay.delayTime.setTargetAtTime(p.phase / Math.max(1, p.freq), t, 0.02);
+      if (key === 'freq')  pt.osc.frequency.setTargetAtTime(p.freq, t, 0.05);
+      if (key === 'amp')   pt.gain.gain.setTargetAtTime(p.amp * norm, t, 0.05);
+      if (key === 'phase') pt.delay.delayTime.setTargetAtTime(p.phase / Math.max(1, p.freq), t, 0.05);
     }
   }
-  renderPartials(i);
 }
 
 function setPart(i,j,key,val) {
@@ -599,7 +616,7 @@ function setPart(i,j,key,val) {
 
 function addPartial(i) {
   if (CH[i].partials.length >= MAXPARTIALS) return;
-  CH[i].partials.push({ freq:220, amp:0.5, phase:0, waveform:"sine", lfo:{freq:false,amp:false,phase:false} });
+  CH[i].partials.push({ freq:220, amp:0.5, phase:0, waveform:"sine", lfo:{freq:0,amp:0,phase:0} });
   buildChannelSynth(i); renderPartials(i);
 }
 
