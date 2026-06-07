@@ -29,6 +29,15 @@ function findTrigger(buf, level, hyst=0.02) {
 // ── State ──────────────────────────────────────────────────────────────────
 const G = { timebase:1, noise:0, trig:0, mode:"wave", running:true };
 
+// display-only customization (never touches the audio)
+const VIS = { bg:"#000000", grid:true, gridColor:"#39ff14", glow:1, thickness:1, crt:true };
+const BG_PALETTE = ["#000000","#0a0a1a","#001018","#140019","#141414","#001a0e"];
+const hexRgba = (hex,a) => {
+  let h=hex.replace("#",""); if (h.length===3) h=h.replace(/(.)/g,"$1$1");
+  const n=parseInt(h,16);
+  return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`;
+};
+
 const CH = [
   { enabled:true, src:"synth", waveform:"sine", freq:2, pitch:220, amp:0.75, gain:2, yOff:0, color:"#39ff14", axis:"x",
     partials:[{ratio:1, amp:1, phase:0}],
@@ -181,14 +190,15 @@ function initCanvas() {
 }
 
 function drawGrid() {
-  const cols=10, rows=8;
+  if (!VIS.grid) return;
+  const cols=10, rows=8, gc=VIS.gridColor;
   for(let i=0;i<=cols;i++){
-    ctx.strokeStyle=i===5?"rgba(57,255,20,0.28)":"rgba(57,255,20,0.12)";
+    ctx.strokeStyle=i===5?hexRgba(gc,0.28):hexRgba(gc,0.12);
     ctx.lineWidth=i===5?1:0.5;
     ctx.beginPath();ctx.moveTo((i/cols)*W,0);ctx.lineTo((i/cols)*W,H);ctx.stroke();
   }
   for(let j=0;j<=rows;j++){
-    ctx.strokeStyle=j===4?"rgba(57,255,20,0.28)":"rgba(57,255,20,0.12)";
+    ctx.strokeStyle=j===4?hexRgba(gc,0.28):hexRgba(gc,0.12);
     ctx.lineWidth=j===4?1:0.5;
     ctx.beginPath();ctx.moveTo(0,(j/rows)*H);ctx.lineTo(W,(j/rows)*H);ctx.stroke();
   }
@@ -237,7 +247,7 @@ function getWaveSamples(ch, n) {
 // ── Scope renderers ──────────────────────────────────────────────────────────
 function strokePts(c, pts, color, blur, lw) {
   if (pts.length<2) return;
-  c.shadowBlur=blur; c.shadowColor=color; c.strokeStyle=color; c.lineWidth=lw;
+  c.shadowBlur=blur*VIS.glow; c.shadowColor=color; c.strokeStyle=color; c.lineWidth=lw*VIS.thickness;
   c.beginPath(); pts.forEach(([x,y],i)=>i?c.lineTo(x,y):c.moveTo(x,y)); c.stroke();
   c.shadowBlur=0;
 }
@@ -282,14 +292,14 @@ function drawXY() {
 function paintXY(pts, colA, colB) {
   const grad = offCtx.createLinearGradient(0,0,W,H);
   grad.addColorStop(0, colA); grad.addColorStop(1, colB);
-  const glow = blendHex(colA, colB);
+  const glowCol = blendHex(colA, colB);
   const path = lw => {
     offCtx.beginPath();
     pts.forEach(([px,py],i)=>{ i?offCtx.lineTo(px,py):offCtx.moveTo(px,py); });
-    offCtx.lineWidth=lw; offCtx.stroke();
+    offCtx.lineWidth=lw*VIS.thickness; offCtx.stroke();
   };
-  offCtx.shadowBlur=0; offCtx.strokeStyle=glow+"33"; path(4);
-  offCtx.shadowBlur=8; offCtx.shadowColor=glow; offCtx.strokeStyle=grad; path(1.5);
+  offCtx.shadowBlur=0; offCtx.strokeStyle=glowCol+"33"; path(4);
+  offCtx.shadowBlur=8*VIS.glow; offCtx.shadowColor=glowCol; offCtx.strokeStyle=grad; path(1.5);
   offCtx.shadowBlur=0;
 }
 
@@ -299,17 +309,19 @@ function loop(ts) {
   if (!offCtx || !G.running) return;
   t0 = ts;
 
-  offCtx.fillStyle="rgba(0,0,0,0.2)"; offCtx.fillRect(0,0,W,H);
+  offCtx.fillStyle=hexRgba(VIS.bg,0.2); offCtx.fillRect(0,0,W,H);
   if (G.mode==="wave")    drawWave();
   else if (G.mode==="xy") drawXY();
 
-  ctx.fillStyle="#000"; ctx.fillRect(0,0,W,H);
+  ctx.fillStyle=VIS.bg; ctx.fillRect(0,0,W,H);
   ctx.drawImage(off,0,0);
   drawGrid();
-  for(let y=0;y<H;y+=Math.max(2,H/180)){ctx.fillStyle="rgba(0,0,0,0.05)";ctx.fillRect(0,y,W,1);}
-  const vg=ctx.createRadialGradient(W/2,H/2,H*.2,W/2,H/2,H*.8);
-  vg.addColorStop(0,"transparent"); vg.addColorStop(1,"rgba(0,0,0,0.55)");
-  ctx.fillStyle=vg; ctx.fillRect(0,0,W,H);
+  if (VIS.crt) {
+    for(let y=0;y<H;y+=Math.max(2,H/180)){ctx.fillStyle="rgba(0,0,0,0.05)";ctx.fillRect(0,y,W,1);}
+    const vg=ctx.createRadialGradient(W/2,H/2,H*.2,W/2,H/2,H*.8);
+    vg.addColorStop(0,"transparent"); vg.addColorStop(1,"rgba(0,0,0,0.55)");
+    ctx.fillStyle=vg; ctx.fillRect(0,0,W,H);
+  }
 }
 
 // ── Mic ────────────────────────────────────────────────────────────────────
@@ -663,7 +675,17 @@ function toggleFullscreen() {
 }
 
 function clearScreen() {
-  if (offCtx){offCtx.fillStyle="#000";offCtx.fillRect(0,0,W,H);}
+  if (offCtx){offCtx.fillStyle=VIS.bg;offCtx.fillRect(0,0,W,H);}
+}
+
+// ── Screen customization (display only) ──────────────────────────────────────
+function setGrid(on, btn) {
+  VIS.grid = on;
+  btn.closest(".seg").querySelectorAll("button").forEach(b=>b.classList.toggle("active", b===btn));
+}
+function setCrt(on, btn) {
+  VIS.crt = on;
+  btn.closest(".seg").querySelectorAll("button").forEach(b=>b.classList.toggle("active", b===btn));
 }
 
 // ── Init ───────────────────────────────────────────────────────────────────
@@ -736,6 +758,22 @@ window.addEventListener("load", ()=>{
   });
   bindMixVol(null, "vol-master", "vv-master");
   refreshMuteBtn("master");
+
+  // SCHERMO: display-only customization
+  const buildSwatches = (id, colors, getCur, onPick) => {
+    const c = document.getElementById(id); if (!c) return;
+    colors.forEach(col=>{
+      const s = document.createElement("div");
+      s.className = "swatch" + (col===getCur()?" selected":"");
+      s.dataset.c = col; s.style.background = col; s.style.boxShadow = `0 0 4px ${col}55`;
+      s.onclick = ()=>{ onPick(col); c.querySelectorAll(".swatch").forEach(x=>x.classList.toggle("selected", x.dataset.c===col)); };
+      c.appendChild(s);
+    });
+  };
+  buildSwatches("bg-swatches",   BG_PALETTE, ()=>VIS.bg,        col=>VIS.bg=col);
+  buildSwatches("grid-swatches", PALETTE,    ()=>VIS.gridColor, col=>VIS.gridColor=col);
+  bindSlider("sl-glow",  "v-glow",  VIS, "glow",      v=>v.toFixed(2));
+  bindSlider("sl-thick", "v-thick", VIS, "thickness", v=>v.toFixed(1));
 
   // init per-channel oscillator editors + mode tab styles
   [0,1].forEach(renderPartials);

@@ -206,6 +206,44 @@
     </div>
   </div>
 
+  <!-- Screen customization (display only — never touches the sound) -->
+  <div class="ch-card" id="screen-card" style="background:var(--yellow)">
+    <span class="section-label">SCHERMO</span>
+
+    <div>
+      <span class="sl" style="font-size:9px;letter-spacing:1px;color:#444;display:block;margin-bottom:6px">SFONDO</span>
+      <div class="swatches" id="bg-swatches"></div>
+    </div>
+
+    <div>
+      <span class="sl" style="font-size:9px;letter-spacing:1px;color:#444">GRIGLIA</span>
+      <div class="seg" id="grid-toggle" style="margin-top:4px">
+        <button class="active" onclick="setGrid(true,this)">ACCESA</button>
+        <button onclick="setGrid(false,this)">SPENTA</button>
+      </div>
+      <div class="swatches" id="grid-swatches" style="margin-top:8px"></div>
+    </div>
+
+    <div class="row-grid">
+      <div class="slider-row">
+        <div class="slider-meta"><span class="sl">BAGLIORE</span><span class="sv" id="v-glow">1.00</span></div>
+        <input type="range" id="sl-glow" min="0" max="2" step="0.05" value="1">
+      </div>
+      <div class="slider-row">
+        <div class="slider-meta"><span class="sl">SPESSORE</span><span class="sv" id="v-thick">1.0</span></div>
+        <input type="range" id="sl-thick" min="0.5" max="3" step="0.1" value="1">
+      </div>
+    </div>
+
+    <div>
+      <span class="sl" style="font-size:9px;letter-spacing:1px;color:#444">EFFETTO CRT (righe + vignetta)</span>
+      <div class="seg" id="crt-toggle" style="margin-top:4px">
+        <button class="active" onclick="setCrt(true,this)">ACCESO</button>
+        <button onclick="setCrt(false,this)">SPENTO</button>
+      </div>
+    </div>
+  </div>
+
 </div>
 
 <script src="app.js"></script>
