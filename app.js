@@ -1129,6 +1129,9 @@ async function updateFavicon() {
            : code <= 82 ? 'sawtooth'
            :              'square';
 
+  const fn = WF[wf];
+
+  // favicon: 32×32 with black background
   const cv = document.createElement('canvas');
   cv.width = cv.height = 32;
   const c2 = cv.getContext('2d');
@@ -1136,15 +1139,29 @@ async function updateFavicon() {
   c2.strokeStyle = col; c2.lineWidth = 2;
   c2.shadowColor = col; c2.shadowBlur = 4;
   c2.beginPath();
-  const fn = WF[wf];
   for (let x = 0; x <= 32; x++) {
-    const y = 16 - fn(x / 32 * 2) * 11;   // 2 cycles, ±11px around centre
+    const y = 16 - fn(x / 32 * 2) * 11;
     x === 0 ? c2.moveTo(x, y) : c2.lineTo(x, y);
   }
   c2.stroke();
-
   let link = document.querySelector("link[rel='icon']");
   if (!link) { link = document.createElement('link'); link.rel = 'icon'; document.head.appendChild(link); }
   link.type = 'image/png';
   link.href = cv.toDataURL('image/png');
+
+  // header wave: transparent background, 2 cycles
+  const hw = document.getElementById('header-wave');
+  if (hw) {
+    const W = hw.width, H = hw.height;
+    const hc = hw.getContext('2d');
+    hc.clearRect(0, 0, W, H);
+    hc.strokeStyle = col; hc.lineWidth = 1.5;
+    hc.shadowColor = col; hc.shadowBlur = 3;
+    hc.beginPath();
+    for (let x = 0; x <= W; x++) {
+      const y = H / 2 - fn(x / W * 2) * (H / 2 - 3);
+      x === 0 ? hc.moveTo(x, y) : hc.lineTo(x, y);
+    }
+    hc.stroke();
+  }
 }
