@@ -58,6 +58,97 @@ function lfoMod(lfo, tsec) {
   return (adsrAt(phi, lfo.a, lfo.d, lfo.s, lfo.r) - 0.5) * 2;
 }
 
+// ── ADSR canvas editor ─────────────────────────────────────────────────────
+// Five points in normalised [0,1]² coords: start, attack-peak, decay-end,
+// sustain-end, release-end. P0 and P4 are fixed; P1,P2,P3 are draggable.
+function adsrPoints(lfo, W, H) {
+  const tc = (tx, ty) => [tx * W, (1 - ty) * H];
+  return [
+    tc(0,           0),
+    tc(lfo.a,       1),
+    tc(lfo.a+lfo.d, lfo.s),
+    tc(1 - lfo.r,   lfo.s),
+    tc(1,           0),
+  ];
+}
+
+function drawAdsrCanvas(cv, lfo, col) {
+  const W = cv.width, H = cv.height;
+  const c2 = cv.getContext('2d');
+  c2.clearRect(0, 0, W, H);
+  c2.fillStyle = '#111'; c2.fillRect(0, 0, W, H);
+  const pts = adsrPoints(lfo, W, H);
+  // fill under curve
+  c2.beginPath();
+  pts.forEach(([x,y],k) => k===0 ? c2.moveTo(x,y) : c2.lineTo(x,y));
+  c2.lineTo(W,H); c2.lineTo(0,H); c2.closePath();
+  c2.fillStyle = col+'28'; c2.fill();
+  // envelope line
+  c2.beginPath();
+  pts.forEach(([x,y],k) => k===0 ? c2.moveTo(x,y) : c2.lineTo(x,y));
+  c2.strokeStyle = col; c2.lineWidth = 1.5;
+  c2.shadowColor = col; c2.shadowBlur = 4; c2.stroke(); c2.shadowBlur = 0;
+  // draggable nodes P1 P2 P3
+  c2.fillStyle = col; c2.strokeStyle = '#111'; c2.lineWidth = 1.5;
+  pts.slice(1,4).forEach(([x,y]) => {
+    c2.beginPath(); c2.rect(x-5,y-5,10,10); c2.fill(); c2.stroke();
+  });
+}
+
+function hitAdsrNode(px, py, lfo, W, H) {
+  const pts = adsrPoints(lfo, W, H);
+  for (let k = 1; k <= 3; k++) {
+    const [cx,cy] = pts[k];
+    if (Math.abs(px-cx) < 14 && Math.abs(py-cy) < 14) return k;
+  }
+  return -1;
+}
+
+// Update lfo params from a dragged node (nx,ny in 0..1 normalised coords).
+// P1 (node=1): drag X → attack duration a
+// P2 (node=2): drag X → decay d, drag Y → sustain level s
+// P3 (node=3): drag X → release r (= 1 - P3.x)
+function dragAdsrNode(i, j, param, node, nx, ny) {
+  const lfo = CH[i].partials[j].lfo[param];
+  nx = Math.max(0.01, Math.min(0.99, nx));
+  ny = Math.max(0, Math.min(1, ny));
+  if (node === 1) {
+    lfo.a = Math.max(0.01, Math.min(lfo.a + lfo.d - 0.02, nx));
+  } else if (node === 2) {
+    const min = lfo.a + 0.01, max = (1 - lfo.r) - 0.01;
+    lfo.d = Math.max(0.01, Math.min(max, Math.max(min, nx)) - lfo.a);
+    lfo.s = ny;
+  } else if (node === 3) {
+    lfo.r = Math.max(0.01, 1 - Math.max(lfo.a + lfo.d + 0.01, nx));
+  }
+}
+
+function initAdsrCanvases(ch, box) {
+  box.querySelectorAll('.adsr-canvas').forEach(cv => {
+    const j = +cv.dataset.osc, param = cv.dataset.param;
+    drawAdsrCanvas(cv, CH[ch].partials[j].lfo[param], CH[ch].color);
+    let dragNode = -1;
+    cv.addEventListener('pointerdown', e => {
+      const r = cv.getBoundingClientRect();
+      const px = (e.clientX-r.left)*cv.width/r.width;
+      const py = (e.clientY-r.top)*cv.height/r.height;
+      dragNode = hitAdsrNode(px, py, CH[ch].partials[j].lfo[param], cv.width, cv.height);
+      if (dragNode >= 0) { cv.setPointerCapture(e.pointerId); e.preventDefault(); }
+    }, { passive:false });
+    cv.addEventListener('pointermove', e => {
+      if (dragNode < 0) return;
+      e.preventDefault();
+      const r = cv.getBoundingClientRect();
+      dragAdsrNode(ch, j, param, dragNode,
+        (e.clientX-r.left)/r.width,
+        1-(e.clientY-r.top)/r.height);
+      drawAdsrCanvas(cv, CH[ch].partials[j].lfo[param], CH[ch].color);
+    }, { passive:false });
+    cv.addEventListener('pointerup',     () => dragNode = -1);
+    cv.addEventListener('pointercancel', () => dragNode = -1);
+  });
+}
+
 const LFO_DEPTH = { freq: 0.15, amp: 0.6, phase: 0.5 };  // modulation depth, preset
 
 const LFO_DEFAULTS = { rate:0, a:0.1, d:0.2, s:0.7, r:0.2 };
@@ -556,23 +647,13 @@ function lfoPanel(i, j, param, lfo, col) {
   const rateCol = active ? `style="color:${col}"` : '';
   const hide    = active ? '' : ' lfo-adsr-hidden';
 
-  const asl = (key, label, min, max, def, val) =>
-    `<div class="slider-row lfo-row">
-        <div class="slider-meta"><span class="sl lfo-sl">${label}</span><span class="sv lfo-sv" id="lfo-${i}-${j}-${param}-${key}">${val.toFixed(2)}</span></div>
-        <input type="range" class="lfo-range" min="${min}" max="${max}" step="0.01" value="${val}" data-default="${def}" oninput="setLfoAdsr(${i},${j},'${param}','${key}',this.value)">
-      </div>`;
-
   return `<div class="slider-row lfo-row">
       <div class="slider-meta"><span class="sl lfo-sl">~ LFO</span><span class="sv lfo-sv" id="vp-${i}-${j}-lfo-${param}" ${rateCol}>${rateTxt}</span></div>
       <input type="range" class="lfo-range" min="0" max="10" step="0.1" value="${lfo.rate}" data-default="0" oninput="setLfoRate(${i},${j},'${param}',this.value)">
     </div>
     <div class="lfo-adsr${hide}" id="lfo-adsr-${i}-${j}-${param}">
-      <div class="lfo-adsr-grid">
-        ${asl('a','ATT', 0.01,0.98, LFO_DEFAULTS.a, lfo.a)}
-        ${asl('d','DEC', 0,   0.98, LFO_DEFAULTS.d, lfo.d)}
-        ${asl('s','SOS', 0,   1,    LFO_DEFAULTS.s, lfo.s)}
-        ${asl('r','RIL', 0.01,0.98, LFO_DEFAULTS.r, lfo.r)}
-      </div>
+      <canvas class="adsr-canvas" id="adsr-cv-${i}-${j}-${param}"
+        data-osc="${j}" data-param="${param}" width="280" height="60"></canvas>
     </div>`;
 }
 
@@ -613,6 +694,7 @@ function renderPartials(i) {
     html += `<button class="osc-add" style="border-color:${col};color:${col}" onclick="addPartial(${i})">+ OSCILLATORE</button>`;
   box.innerHTML = html;
   enhanceSliders(box);
+  initAdsrCanvases(i, box);
 }
 
 function setLfoRate(i, j, param, val) {
@@ -633,12 +715,6 @@ function setLfoRate(i, j, param, val) {
   }
 }
 
-function setLfoAdsr(i, j, param, key, val) {
-  const v = Math.max(0, Math.min(1, parseFloat(val)));
-  CH[i].partials[j].lfo[param][key] = v;
-  const el = document.getElementById(`lfo-${i}-${j}-${param}-${key}`);
-  if (el) el.textContent = v.toFixed(2);
-}
 
 function setPart(i,j,key,val) {
   if (key === "waveform") {

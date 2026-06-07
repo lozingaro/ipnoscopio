@@ -450,10 +450,14 @@ input[type=range]::-moz-range-thumb { width: 24px; height: 24px; background: var
   margin-top: 2px;
 }
 .lfo-adsr-hidden { display: none; }
-.lfo-adsr-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0 10px;
+.adsr-canvas {
+  display: block;
+  width: 100%;
+  height: 60px;
+  cursor: crosshair;
+  touch-action: none;
+  image-rendering: pixelated;
+  margin-top: 2px;
 }
 
 /* LFO sub-slider (below each oscillator parameter) */
