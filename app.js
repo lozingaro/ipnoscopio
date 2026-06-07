@@ -62,7 +62,7 @@ const oscType = wf => wf;
 
 // Create the shared context + graph on first use (must run inside a user gesture).
 function ensureAudio() {
-  if (AUDIO.ctx) { if (AUDIO.ctx.state==="suspended") AUDIO.ctx.resume(); return AUDIO.ctx; }
+  if (AUDIO.ctx) { return AUDIO.ctx; }
   const ctx = new (window.AudioContext||window.webkitAudioContext)();
   AUDIO.ctx = ctx;
   AUDIO.master = ctx.createGain();
@@ -128,7 +128,7 @@ function updatePartialAudio(i) {
 // buffer to kick the output path awake.
 function unlockAudio() {
   const ctx = ensureAudio();
-  if (ctx.state === "suspended") ctx.resume();
+  if (G.running && ctx.state === "suspended") ctx.resume();
   if (!unlockAudio.kicked) {
     try {
       const b = ctx.createBuffer(1, 1, ctx.sampleRate);
@@ -501,8 +501,8 @@ function renderPartials(i) {
         <input type="range" min="0" max="1" step="0.01" value="${p.amp}" data-default="1" data-snap="0,0.25,0.5,0.75,1" oninput="setPart(${i},${j},'amp',this.value)">
       </div>
       <div class="slider-row">
-        <div class="slider-meta"><span class="sl">FASE</span><span class="sv" id="vp-${i}-${j}-phase">${p.phase.toFixed(2)}</span></div>
-        <input type="range" min="0" max="1" step="0.01" value="${p.phase}" data-default="0" data-snap="0,0.25,0.5,0.75,1" oninput="setPart(${i},${j},'phase',this.value)">
+        <div class="slider-meta"><span class="sl">FASE</span><span class="sv" id="vp-${i}-${j}-phase">${(p.phase*2).toFixed(2)}π</span></div>
+        <input type="range" min="0" max="2" step="0.01" value="${(p.phase*2).toFixed(2)}" data-default="0" data-snap="0,0.5,1,1.5,2" oninput="setPart(${i},${j},'phase',this.value)">
       </div>
     </div>`;
   });
@@ -514,9 +514,15 @@ function renderPartials(i) {
 
 function setPart(i,j,key,val) {
   const v = parseFloat(val);
-  CH[i].partials[j][key] = v;
+  if (key === "phase") {
+    CH[i].partials[j].phase = v / 2;   // slider is 0-2π units; store as 0-1 fraction
+  } else {
+    CH[i].partials[j][key] = v;
+  }
   const el = document.getElementById(`vp-${i}-${j}-${key}`);
-  if (el) el.textContent = key==="freq" ? Math.round(v)+"Hz" : v.toFixed(2);
+  if (el) el.textContent = key==="freq" ? Math.round(v)+"Hz"
+                         : key==="phase" ? v.toFixed(2)+"π"
+                         : v.toFixed(2);
   updatePartialAudio(i);
 }
 
