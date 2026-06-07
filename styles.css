@@ -154,6 +154,53 @@ canvas {
   letter-spacing: 2px;
 }
 
+/* ── FULLSCREEN MINI-CONTROLS (YouTube-style, auto-hiding) ── */
+#fs-bar { display: none; }
+#screen-wrap.fs #btn-fs { display: none; }   /* ESCI replaces GIGANTE */
+#screen-wrap.fs #fs-bar {
+  display: flex;
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  z-index: 10000;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 16px 18px calc(16px + env(safe-area-inset-bottom));
+  background: linear-gradient(transparent, rgba(0,0,0,0.78));
+  transition: opacity .25s ease, transform .25s ease;
+}
+#screen-wrap.fs #fs-bar.hidden {
+  opacity: 0;
+  transform: translateY(10px);
+  pointer-events: none;
+}
+
+.fs-btn {
+  background: rgba(0,0,0,0.55);
+  color: #39ff14;
+  border: 2px solid #39ff14;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 9px; line-height: 1; letter-spacing: 1px;
+  padding: 12px 14px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.fs-btn:active { transform: translate(1px,1px); }
+
+.fs-seg { display: flex; gap: 5px; }
+.fs-seg button {
+  background: rgba(0,0,0,0.55);
+  color: #39ff14;
+  border: 2px solid #39ff14;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 9px; line-height: 1; letter-spacing: 1px;
+  padding: 12px 14px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.fs-seg button.active { background: #39ff14; color: #000; }
+.fs-seg button:active { transform: translate(1px,1px); }
+
 #mode-label {
   position: absolute;
   top: 8px; right: 10px;

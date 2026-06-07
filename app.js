@@ -441,6 +441,7 @@ function setMode(m) {
   });
   const label = { wave:"ONDA", xy:"X-Y" }[m] || m.toUpperCase();
   document.getElementById("screen-label").textContent = label;
+  document.querySelectorAll("#fs-mode button").forEach(b=>b.classList.toggle("active", b.dataset.m===m));
   // axis pickers only matter in X-Y; SU-GIU' (vertical offset) only in ONDA
   [0,1].forEach(i => {
     document.getElementById("axis-row-ch"+i).style.display = m==="xy"?"block":"none";
@@ -652,6 +653,8 @@ function toggleRun() {
   const btn = document.getElementById("btn-run");
   btn.textContent = G.running?"FERMA":"VAI";
   btn.classList.toggle("stopped", !G.running);
+  const fr = document.getElementById("fs-run");
+  if (fr) fr.textContent = G.running?"FERMA":"VAI";
   const led = document.getElementById("led-run");
   if (led) {
     led.style.background = G.running?"#39ff14":"#333";
@@ -670,8 +673,23 @@ function toggleFullscreen() {
     if (on && el.requestFullscreen) el.requestFullscreen().catch(()=>{});
     else if (!on && document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(()=>{});
   } catch(e){}
+  // fullscreen mini-controls: show on enter, clear on exit
+  const bar = document.getElementById("fs-bar");
+  clearTimeout(fsTimer);
+  if (on) fsBarShow(); else bar.classList.add("hidden");
   // the canvas changed size → recompute the backing store next frame
   requestAnimationFrame(initCanvas);
+}
+
+// reveal the fullscreen control bar and re-arm its auto-hide (YouTube-style)
+let fsTimer = null;
+function fsBarShow() {
+  const wrap = document.getElementById("screen-wrap");
+  if (!wrap.classList.contains("fs")) return;
+  const bar = document.getElementById("fs-bar");
+  bar.classList.remove("hidden");
+  clearTimeout(fsTimer);
+  fsTimer = setTimeout(()=>bar.classList.add("hidden"), 2800);
 }
 
 function clearScreen() {
@@ -774,6 +792,11 @@ window.addEventListener("load", ()=>{
   buildSwatches("grid-swatches", PALETTE,    ()=>VIS.gridColor, col=>VIS.gridColor=col);
   bindSlider("sl-glow",  "v-glow",  VIS, "glow",      v=>v.toFixed(2));
   bindSlider("sl-thick", "v-thick", VIS, "thickness", v=>v.toFixed(1));
+
+  // fullscreen mini-controls: any activity over the screen reveals the bar
+  const wrap = document.getElementById("screen-wrap");
+  ["pointermove","pointerdown","touchstart"].forEach(ev =>
+    wrap.addEventListener(ev, fsBarShow, { passive:true }));
 
   // init per-channel oscillator editors + mode tab styles
   [0,1].forEach(renderPartials);
