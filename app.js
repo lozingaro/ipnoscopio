@@ -452,8 +452,6 @@ function setMode(m) {
     btn.style.color = m===id?"#39ff14":"#555";
     btn.style.boxShadow = m===id?"inset 0 -2px 0 #39ff14":"none";
   });
-  const label = { wave:"ONDA", xy:"X-Y" }[m] || m.toUpperCase();
-  document.getElementById("screen-label").textContent = label;
   document.querySelectorAll("#fs-mode button").forEach(b=>b.classList.toggle("active", b.dataset.m===m));
   // axis pickers only matter in X-Y; SU-GIU' (vertical offset) only in ONDA
   [0,1].forEach(i => {
@@ -479,21 +477,22 @@ function renderPartials(i) {
       </div>
       <div class="slider-row">
         <div class="slider-meta"><span class="sl">FREQUENZA</span><span class="sv" id="vp-${i}-${j}-freq">${Math.round(p.freq)}Hz</span></div>
-        <input type="range" min="20" max="2000" step="1" value="${p.freq}" oninput="setPart(${i},${j},'freq',this.value)">
+        <input type="range" min="20" max="2000" step="1" value="${p.freq}" data-default="220" data-snap="step:55" oninput="setPart(${i},${j},'freq',this.value)">
       </div>
       <div class="slider-row">
         <div class="slider-meta"><span class="sl">AMPIEZZA</span><span class="sv" id="vp-${i}-${j}-amp">${p.amp.toFixed(2)}</span></div>
-        <input type="range" min="0" max="1" step="0.01" value="${p.amp}" oninput="setPart(${i},${j},'amp',this.value)">
+        <input type="range" min="0" max="1" step="0.01" value="${p.amp}" data-default="1" data-snap="0,0.25,0.5,0.75,1" oninput="setPart(${i},${j},'amp',this.value)">
       </div>
       <div class="slider-row">
         <div class="slider-meta"><span class="sl">FASE</span><span class="sv" id="vp-${i}-${j}-phase">${p.phase.toFixed(2)}</span></div>
-        <input type="range" min="0" max="1" step="0.01" value="${p.phase}" oninput="setPart(${i},${j},'phase',this.value)">
+        <input type="range" min="0" max="1" step="0.01" value="${p.phase}" data-default="0" data-snap="0,0.25,0.5,0.75,1" oninput="setPart(${i},${j},'phase',this.value)">
       </div>
     </div>`;
   });
   if (ch.partials.length < MAXPARTIALS)
     html += `<button class="osc-add" style="border-color:${col};color:${col}" onclick="addPartial(${i})">+ OSCILLATORE</button>`;
   box.innerHTML = html;
+  enhanceSliders(box);     // editable values + snap + double-tap reset
 }
 
 function setPart(i,j,key,val) {
@@ -707,6 +706,79 @@ function clearScreen() {
   if (offCtx){offCtx.fillStyle="#000";offCtx.fillRect(0,0,W,H);}
 }
 
+// ── Slider ergonomics ────────────────────────────────────────────────────────
+// Light, overridable magnetic snap to "notable" values; declared per slider via
+// data-snap="0,0.5,1" (explicit) or data-snap="step:55" (multiples).
+function snapValue(range) {
+  const spec = range.dataset.snap; if (!spec) return;
+  const min=+range.min, max=+range.max, v=+range.value;
+  let targets;
+  if (spec.startsWith("step:")) {
+    const st=+spec.slice(5); targets=[];
+    for (let x=Math.ceil(min/st)*st; x<=max+1e-9; x+=st) targets.push(+x.toFixed(6));
+  } else targets = spec.split(",").map(Number).sort((a,b)=>a-b);
+  if (!targets.length) return;
+  let spacing=Infinity;
+  for (let i=1;i<targets.length;i++) spacing=Math.min(spacing, targets[i]-targets[i-1]);
+  if (!isFinite(spacing)) spacing=max-min;
+  let best=null, bd=Infinity;
+  for (const t of targets) { const d=Math.abs(v-t); if (d<bd){bd=d;best=t;} }
+  if (best!=null && bd <= spacing*0.18) range.value=String(best);
+}
+// snap only real drags (isTrusted); typed/dispatched values stay exact
+document.addEventListener("input", e=>{
+  const t=e.target;
+  if (e.isTrusted && t && t.matches && t.matches('input[type=range][data-snap]')) snapValue(t);
+}, true);
+
+// make a readout (.sv) editable: click to type an exact value
+function makeEditable(sv, range) {
+  const commit = cancel => {
+    if (!sv.dataset.editing) return;
+    delete sv.dataset.editing; sv.contentEditable="false";
+    if (!cancel) {
+      let v=parseFloat(sv.textContent.replace(",","."));
+      if (!isNaN(v)) range.value=String(Math.min(+range.max, Math.max(+range.min, v)));
+    }
+    range.dispatchEvent(new Event("input",{bubbles:true}));   // reformats + updates state
+  };
+  sv.addEventListener("click", ()=>{
+    if (sv.dataset.editing) return;
+    sv.dataset.editing="1"; sv.contentEditable="true"; sv.textContent=String(range.value);
+    const r=document.createRange(); r.selectNodeContents(sv);
+    const s=getSelection(); s.removeAllRanges(); s.addRange(r); sv.focus();
+  });
+  sv.addEventListener("blur", ()=>commit(false));
+  sv.addEventListener("keydown", e=>{
+    if (e.key==="Enter"){ e.preventDefault(); sv.blur(); }
+    else if (e.key==="Escape"){ commit(true); sv.blur(); }
+  });
+}
+
+// wire double-tap-to-default + editable readouts for every slider under root
+function enhanceSliders(root) {
+  root.querySelectorAll('input[type=range]').forEach(range=>{
+    if (range.dataset.enh) return; range.dataset.enh="1";
+    if (range.dataset.default!==undefined) {
+      let downX=0, moved=false, lastTap=0;
+      const reset=()=>{ range.value=range.dataset.default; range.dispatchEvent(new Event("input",{bubbles:true})); };
+      range.addEventListener("pointerdown", e=>{ downX=e.clientX; moved=false; });
+      range.addEventListener("pointermove", e=>{ if (Math.abs(e.clientX-downX)>8) moved=true; });
+      range.addEventListener("pointerup", ()=>{
+        if (moved) { lastTap=0; return; }
+        const now=performance.now();
+        if (now-lastTap<320) { reset(); lastTap=0; } else lastTap=now;
+      });
+    }
+  });
+  root.querySelectorAll(".sv").forEach(sv=>{
+    if (sv.dataset.enh) return;
+    const row=sv.closest(".slider-row, .mix-strip"); if (!row) return;
+    const range=row.querySelector('input[type=range]'); if (!range) return;
+    sv.dataset.enh="1"; makeEditable(sv, range);
+  });
+}
+
 // ── Init ───────────────────────────────────────────────────────────────────
 window.addEventListener("load", ()=>{
   initCanvas();
@@ -784,6 +856,7 @@ window.addEventListener("load", ()=>{
 
   // init per-channel oscillator editors + mode tab styles
   [0,1].forEach(renderPartials);
+  enhanceSliders(document);     // editable values + snap + double-tap reset (static sliders)
   setMode("wave");
 
   requestAnimationFrame(loop);
