@@ -22,6 +22,10 @@ function findTrigger(buf, level, hyst=0.02) {
   return 0;
 }
 
+// ── LFO defaults (defined before CH so mkLfo() is available at init) ───────
+const LFO_DEFAULTS = { rate:0, a:0.1, d:0.2, s:0.7, r:0.2 };
+const mkLfo = () => ({ ...LFO_DEFAULTS });
+
 // ── State ──────────────────────────────────────────────────────────────────
 const G = { timebase:1, noise:0, trig:0, mode:"wave", running:true };
 
@@ -150,9 +154,6 @@ function initAdsrCanvases(ch, box) {
 }
 
 const LFO_DEPTH = { freq: 0.15, amp: 0.6, phase: 0.5 };  // modulation depth, preset
-
-const LFO_DEFAULTS = { rate:0, a:0.1, d:0.2, s:0.7, r:0.2 };
-const mkLfo = () => ({ ...LFO_DEFAULTS });
 // keep the additive sum bounded to -1..1 regardless of how many partials are on
 const partNorm = ch => 1/Math.max(1, ch.partials.reduce((s,p)=>s+p.amp,0));
 
