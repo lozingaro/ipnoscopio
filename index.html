@@ -24,7 +24,6 @@
 <div id="stage">
   <div id="screen-wrap">
     <canvas id="scope"></canvas>
-    <div id="screen-label">ONDA</div>
     <button id="btn-fs" onclick="toggleFullscreen()" aria-label="Tutto schermo">GIGANTE</button>
 
     <!-- fullscreen mini-controls (YouTube-style, auto-hiding); only shown in .fs -->
@@ -86,28 +85,28 @@
       <select id="input-ch-ch0" class="input-device" style="margin-top:4px"></select>
     </div>
 
-    <div class="row-grid">
-      <div class="slider-row" id="gain-row-ch0">
-        <div class="slider-meta"><span class="sl">GUADAGNO</span><span class="sv" id="v-gain-ch0">×1.0</span></div>
-        <input type="range" id="sl-gain-ch0" min="0.1" max="10" step="0.1" value="1">
-      </div>
+    <div class="slider-row" id="gain-row-ch0">
+      <div class="slider-meta"><span class="sl">GUADAGNO</span><span class="sv" id="v-gain-ch0">×1.0</span></div>
+      <input type="range" id="sl-gain-ch0" min="0.1" max="10" step="0.1" value="1" data-default="1" data-snap="step:1">
+    </div>
+
+    <div class="subpanel">
+      <span class="subpanel-label">VISIVO</span>
       <div class="slider-row" id="yoff-row-ch0">
         <div class="slider-meta"><span class="sl">SU-GIU'</span><span class="sv" id="v-yoff-ch0">0.0</span></div>
-        <input type="range" id="sl-yoff-ch0" min="-2" max="2" step="0.1" value="0">
+        <input type="range" id="sl-yoff-ch0" min="-2" max="2" step="0.1" value="0" data-default="0" data-snap="-2,-1,0,1,2">
       </div>
-    </div>
-
-    <div id="axis-row-ch0" style="display:none">
-      <span class="sl" style="font-size:9px;letter-spacing:1px;color:#444">ASSE (X-Y)</span>
-      <div class="seg" style="margin-top:4px" id="axis-ch0">
-        <button class="active" data-v="x" onclick="setAxis(0,this)">X</button>
-        <button data-v="y" onclick="setAxis(0,this)">Y</button>
+      <div id="axis-row-ch0" style="display:none">
+        <span class="sl" style="font-size:9px;letter-spacing:1px;color:#444">ASSE (X-Y)</span>
+        <div class="seg" style="margin-top:4px" id="axis-ch0">
+          <button class="active" data-v="x" onclick="setAxis(0,this)">X</button>
+          <button data-v="y" onclick="setAxis(0,this)">Y</button>
+        </div>
       </div>
-    </div>
-
-    <div>
-      <span class="sl" style="font-size:9px;letter-spacing:1px;color:#444;display:block;margin-bottom:6px">COLORE</span>
-      <div class="swatches" id="swatches-ch0"></div>
+      <div>
+        <span class="sl" style="font-size:9px;letter-spacing:1px;color:#444;display:block;margin-bottom:6px">COLORE</span>
+        <div class="swatches" id="swatches-ch0"></div>
+      </div>
     </div>
   </div>
 
@@ -147,28 +146,28 @@
       <select id="input-ch-ch1" class="input-device" style="margin-top:4px"></select>
     </div>
 
-    <div class="row-grid">
-      <div class="slider-row" id="gain-row-ch1">
-        <div class="slider-meta"><span class="sl">GUADAGNO</span><span class="sv" id="v-gain-ch1">×1.0</span></div>
-        <input type="range" id="sl-gain-ch1" min="0.1" max="10" step="0.1" value="1">
-      </div>
+    <div class="slider-row" id="gain-row-ch1">
+      <div class="slider-meta"><span class="sl">GUADAGNO</span><span class="sv" id="v-gain-ch1">×1.0</span></div>
+      <input type="range" id="sl-gain-ch1" min="0.1" max="10" step="0.1" value="1" data-default="1" data-snap="step:1">
+    </div>
+
+    <div class="subpanel">
+      <span class="subpanel-label">VISIVO</span>
       <div class="slider-row" id="yoff-row-ch1">
         <div class="slider-meta"><span class="sl">SU-GIU'</span><span class="sv" id="v-yoff-ch1">0.0</span></div>
-        <input type="range" id="sl-yoff-ch1" min="-2" max="2" step="0.1" value="0">
+        <input type="range" id="sl-yoff-ch1" min="-2" max="2" step="0.1" value="0" data-default="0" data-snap="-2,-1,0,1,2">
       </div>
-    </div>
-
-    <div id="axis-row-ch1" style="display:none">
-      <span class="sl" style="font-size:9px;letter-spacing:1px;color:#444">ASSE (X-Y)</span>
-      <div class="seg" style="margin-top:4px" id="axis-ch1">
-        <button data-v="x" onclick="setAxis(1,this)">X</button>
-        <button class="active" data-v="y" onclick="setAxis(1,this)">Y</button>
+      <div id="axis-row-ch1" style="display:none">
+        <span class="sl" style="font-size:9px;letter-spacing:1px;color:#444">ASSE (X-Y)</span>
+        <div class="seg" style="margin-top:4px" id="axis-ch1">
+          <button data-v="x" onclick="setAxis(1,this)">X</button>
+          <button class="active" data-v="y" onclick="setAxis(1,this)">Y</button>
+        </div>
       </div>
-    </div>
-
-    <div>
-      <span class="sl" style="font-size:9px;letter-spacing:1px;color:#444;display:block;margin-bottom:6px">COLORE</span>
-      <div class="swatches" id="swatches-ch1"></div>
+      <div>
+        <span class="sl" style="font-size:9px;letter-spacing:1px;color:#444;display:block;margin-bottom:6px">COLORE</span>
+        <div class="swatches" id="swatches-ch1"></div>
+      </div>
     </div>
   </div>
 

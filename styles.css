@@ -415,29 +415,58 @@ canvas {
 
 input[type=range] {
   width: 100%;
-  height: 22px;
+  height: 34px;
   cursor: pointer;
   accent-color: var(--ink);
   -webkit-appearance: none;
   appearance: none;
   background: transparent;
+  touch-action: pan-y;        /* let vertical page scroll start on the slider too */
 }
 
 input[type=range]::-webkit-slider-runnable-track {
-  height: 6px;
+  height: 10px;
   background: var(--ink);
   border: 2px solid var(--ink);
 }
 
 input[type=range]::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 16px;
-  height: 16px;
+  width: 26px;
+  height: 26px;
   background: var(--yellow);
-  border: 2px solid var(--ink);
-  margin-top: -7px;
+  border: 3px solid var(--ink);
+  margin-top: -10px;
   cursor: pointer;
   image-rendering: pixelated;
+}
+input[type=range]::-moz-range-track { height: 10px; background: var(--ink); border: 2px solid var(--ink); }
+input[type=range]::-moz-range-thumb { width: 24px; height: 24px; background: var(--yellow); border: 3px solid var(--ink); border-radius: 0; }
+
+/* editable readout: click the number to type an exact value */
+.slider-meta .sv, .mix-head .sv { cursor: text; }
+.sv[contenteditable="true"] {
+  outline: 2px solid var(--ink);
+  background: var(--white);
+  padding: 0 3px;
+  min-width: 28px;
+}
+
+/* dedicated per-channel VISIVO sub-panel */
+.subpanel {
+  border: 2px solid var(--ink);
+  background: rgba(0,0,0,0.04);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.subpanel-label {
+  font-size: 8px;
+  letter-spacing: 1px;
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 /* ── SWATCHES ── */
