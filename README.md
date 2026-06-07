@@ -1,39 +1,57 @@
-# Oscilloscopio della Gleba
+# Ipnoscopio
 
-Analog oscilloscope simulator — plain HTML/CSS/JS (`index.html` + `styles.css` + `app.js`), no build step, zero dependencies.
+Oscilloscopio analogico simulato — plain HTML/CSS/JS (`index.html` + `styles.css` + `app.js`), nessun build, zero dipendenze.
 
 **Live:** <https://lozingaro.github.io/oscilloscope>
 
-## Features
+## Funzionalità
 
-- **2 channels** (CH1 / CH2), each with its own colour, frequency, amplitude, gain and Y-offset
-- **Synth waveforms:** sine, square, sawtooth, triangle
-- **Microphone input** with trigger sync (progressive `getUserMedia` fallback, works on iOS Safari)
-- **Display modes:**
-  - `WAVE` — time domain
-  - `DOT` — single moving point
-  - `XY` — Lissajous (channel X vs channel Y)
-  - `DRAW` — sketch a shape, turn it into a looping stereo signal (L=X, R=Y) and watch it traced in XY
-- Global timebase, noise and trigger-level controls
-- Phosphor CRT afterglow, scanlines and vignette
-- Dr. Pira / *Fumetti della Gleba* comic-strip visual style
-- Mobile-first, responsive layout
+### Due canali (CANALE UNO · L / CANALE DUE · R)
 
-## Run locally
+Ogni canale ha:
 
-Just open `index.html` in any browser. Microphone input requires HTTPS (or `localhost`).
+- **Sorgente:** SINTETIZZATORE (additivo), MICROFONO, LINEA (ingresso audio esterno con selettore dispositivo e canale)
+- **Sintesi additiva:** fino a 4 oscillatori per canale, ognuno con FREQUENZA (20–2000 Hz), AMPIEZZA (0–1) e FASE (0–2π, mostrata in multipli di π)
+- **Forma d'onda:** SENO, QUADRA, DENTE, TRIANGOLO
+- **GUADAGNO** (×0.1–×10)
+- **Pannello VISIVO:** SU-GIÙ (offset verticale), ASSE X/Y (solo in modalità X VS Y), selezione COLORE (8 colori)
 
-## Roadmap
+### Mixer
 
-- SVG upload → XY audio
-- XY audio effects (rotation, scale, wobble LFO)
-- Image upload → edge detection → XY audio
+Fader di volume + pulsante SUONA/ZITTO per ogni canale, più master volume e mute.
+
+### Modalità display
+
+| Pulsante | Descrizione |
+|----------|-------------|
+| **ONDA** | Dominio del tempo (time domain), una traccia per canale |
+| **X VS Y** | Lissajous — un canale sull'asse X, l'altro sull'asse Y |
+
+### Ergonomia slider
+
+- **Snap magnetico** verso valori notevoli (configurato via `data-snap`)
+- **Doppio tap** → reset al valore di default (`data-default`)
+- **Click sul valore** → modifica diretta (contentEditable, conferma con Invio)
+
+### Altre funzionalità
+
+- **GIGANTE** (fullscreen) con barra mini-controlli auto-nascondente (stile YouTube)
+- **VAI / FERMA** — avvio e pausa dell'acquisizione
+- Trigger su zero-crossing per visualizzazione stabile in modalità ONDA
+- CRT phosphor afterglow, scanline orizzontali, vignette
+- Microfono: fallback progressivo su sample rate (44.1/48 kHz), funziona su iOS Safari
+- Layout mobile-first, responsive a due colonne su desktop (≥ 860 px)
+- Stile visivo fumettistico: Dr. Pira / *Fumetti della Gleba*
+
+## Eseguire in locale
+
+Apri `index.html` in qualsiasi browser. L'ingresso microfono e LINEA richiedono HTTPS (o `localhost`).
 
 ## Credits
 
-- Inspired by [osci-render](https://osci-render.com) by James H. Ball (GPLv3)
-- Visual style: [Dr. Pira / Fumetti della Gleba](https://fumettidellagleba.org)
+- Ispirato a [osci-render](https://osci-render.com) di James H. Ball (GPLv3)
+- Stile visivo: [Dr. Pira / Fumetti della Gleba](https://fumettidellagleba.org)
 
-## License
+## Licenza
 
 [GPLv3](LICENSE)
