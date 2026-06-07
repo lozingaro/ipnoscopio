@@ -443,6 +443,22 @@ input[type=range]::-webkit-slider-thumb {
 input[type=range]::-moz-range-track { height: 10px; background: var(--ink); border: 2px solid var(--ink); }
 input[type=range]::-moz-range-thumb { width: 24px; height: 24px; background: var(--yellow); border: 3px solid var(--ink); border-radius: 0; }
 
+/* LFO toggle button (per-parameter, inside slider-meta) */
+.lfo-btn {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 6px;
+  padding: 2px 5px;
+  border: 1px solid #444;
+  background: transparent;
+  color: #555;
+  cursor: pointer;
+  line-height: 1;
+  letter-spacing: 1px;
+  -webkit-tap-highlight-color: transparent;
+  flex-shrink: 0;
+}
+.lfo-btn:active { opacity: 0.6; }
+
 /* editable readout: click the number to type an exact value */
 .slider-meta .sv, .mix-head .sv { cursor: text; }
 .sv[contenteditable="true"] {

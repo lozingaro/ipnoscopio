@@ -27,14 +27,17 @@ const G = { timebase:1, noise:0, trig:0, mode:"wave", running:true };
 
 const CH = [
   { enabled:true, src:"synth", gain:1, yOff:0, color:"#39ff14", axis:"x", inputCh:0,
-    partials:[{freq:220, amp:1, phase:0, waveform:"sine"}],
+    partials:[{freq:220, amp:1, phase:0, waveform:"sine", lfo:{freq:false,amp:false,phase:false}}],
     stream:null, micNode:null, analyser:null, micBuf:null, micOk:false },
   { enabled:true, src:"synth", gain:1, yOff:0, color:"#00cfff", axis:"y", inputCh:1,
-    partials:[{freq:330, amp:1, phase:0, waveform:"sine"}],
+    partials:[{freq:330, amp:1, phase:0, waveform:"sine", lfo:{freq:false,amp:false,phase:false}}],
     stream:null, micNode:null, analyser:null, micBuf:null, micOk:false },
 ];
 const MAXPARTIALS = 4;
 const CYCLE_HZ = 55;     // Hz that map to one on-screen cycle (visual scaling only)
+
+const LFO_RATE  = 2;                                // Hz — preset
+const LFO_DEPTH = { freq: 0.15, amp: 0.6, phase: 0.5 };
 // keep the additive sum bounded to -1..1 regardless of how many partials are on
 const partNorm = ch => 1/Math.max(1, ch.partials.reduce((s,p)=>s+p.amp,0));
 
@@ -198,18 +201,23 @@ function initCanvas() {
   offCtx.fillStyle="#000"; offCtx.fillRect(0,0,W,H);
 }
 
+const DOT_SPACING = 40;   // px — distance between dots in the grid
+
 function drawGrid() {
-  const cols=10, rows=8;
-  for(let i=0;i<=cols;i++){
-    ctx.strokeStyle=i===5?"rgba(57,255,20,0.28)":"rgba(57,255,20,0.12)";
-    ctx.lineWidth=i===5?1:0.5;
-    ctx.beginPath();ctx.moveTo((i/cols)*W,0);ctx.lineTo((i/cols)*W,H);ctx.stroke();
+  const dpr = window.devicePixelRatio || 1;
+  const step = DOT_SPACING * dpr;
+  const cx = W / 2, cy = H / 2;
+  // offset so centre-lines land exactly on a dot
+  const ox = cx % step, oy = cy % step;
+  ctx.fillStyle = "rgba(57,255,20,0.18)";
+  for (let x = ox; x <= W; x += step) {
+    for (let y = oy; y <= H; y += step) {
+      const onAxis = (Math.abs(x - cx) < 1 || Math.abs(y - cy) < 1);
+      ctx.globalAlpha = onAxis ? 0.45 : 0.18;
+      ctx.fillRect(x - 1, y - 1, 2, 2);
+    }
   }
-  for(let j=0;j<=rows;j++){
-    ctx.strokeStyle=j===4?"rgba(57,255,20,0.28)":"rgba(57,255,20,0.12)";
-    ctx.lineWidth=j===4?1:0.5;
-    ctx.beginPath();ctx.moveTo(0,(j/rows)*H);ctx.lineTo(W,(j/rows)*H);ctx.stroke();
-  }
+  ctx.globalAlpha = 1;
 }
 
 // ── Signal helpers ─────────────────────────────────────────────────────────
@@ -219,7 +227,13 @@ let t0=0;
 // Each oscillator: freq (Hz, drawn as freq/CYCLE_HZ cycles), amp, phase (0..1).
 function synthAt(ch, u) {
   let s = 0;
-  for (const o of ch.partials) s += o.amp * WF[o.waveform](o.freq/CYCLE_HZ*u + o.phase);
+  const lfoSin = Math.sin(2 * Math.PI * LFO_RATE * t0 * 0.001);
+  for (const o of ch.partials) {
+    const freq  = o.freq  * (1 + (o.lfo.freq  ? lfoSin * LFO_DEPTH.freq  : 0));
+    const amp   = Math.max(0, o.amp * (1 + (o.lfo.amp   ? lfoSin * LFO_DEPTH.amp   : 0)));
+    const phase = o.phase + (o.lfo.phase ? lfoSin * LFO_DEPTH.phase : 0);
+    s += amp * WF[o.waveform](freq/CYCLE_HZ*u + phase);
+  }
   return s * partNorm(ch);
 }
 
@@ -311,11 +325,30 @@ function paintXY(pts, colA, colB) {
   offCtx.shadowBlur=0;
 }
 
+// ── Audio LFO (frame-rate updates to AudioParams) ──────────────────────────
+function updateAudioLFOs(ts) {
+  if (!AUDIO.ctx) return;
+  const lfoSin = Math.sin(2 * Math.PI * LFO_RATE * ts * 0.001);
+  const t = AUDIO.ctx.currentTime;
+  CH.forEach((ch, i) => {
+    if (ch.src !== "synth") return;
+    const c = AUDIO.chan[i];
+    const norm = partNorm(ch);
+    ch.partials.forEach((p, j) => {
+      const pt = c.parts[j]; if (!pt) return;
+      if (p.lfo.freq)  pt.osc.frequency.setTargetAtTime(p.freq * (1 + lfoSin * LFO_DEPTH.freq), t, 0.005);
+      if (p.lfo.amp)   pt.gain.gain.setTargetAtTime(Math.max(0, p.amp * (1 + lfoSin * LFO_DEPTH.amp)) * norm, t, 0.005);
+      if (p.lfo.phase) pt.delay.delayTime.setTargetAtTime((p.phase + lfoSin * LFO_DEPTH.phase) / Math.max(1, p.freq), t, 0.005);
+    });
+  });
+}
+
 // ── Render loop ────────────────────────────────────────────────────────────
 function loop(ts) {
   requestAnimationFrame(loop);
   if (!offCtx || !G.running) return;
   t0 = ts;
+  updateAudioLFOs(ts);
 
   offCtx.fillStyle="rgba(0,0,0,0.2)"; offCtx.fillRect(0,0,W,H);
   if (G.mode==="wave")    drawWave();
@@ -483,6 +516,14 @@ function setMode(m) {
 // phase} you can add/remove to experiment. The editor lives in the channel card.
 const WF_LABELS = { sine:"SENO", square:"QUADRA", sawtooth:"DENTE", triangle:"TRIANGOLO" };
 
+function lfoBtn(i, j, key, active, col) {
+  const bg  = active ? col : "transparent";
+  const clr = active ? "#000" : "#555";
+  const bdr = active ? col : "#444";
+  const sh  = active ? `0 0 5px ${col}` : "none";
+  return `<button class="lfo-btn" style="background:${bg};color:${clr};border-color:${bdr};box-shadow:${sh}" onclick="toggleLfo(${i},${j},'${key}')">LFO</button>`;
+}
+
 function renderPartials(i) {
   const box = document.getElementById("osc-ch"+i);
   if (!box) return;
@@ -500,15 +541,15 @@ function renderPartials(i) {
       </div>
       <div class="seg" style="margin-bottom:6px">${wfBtns}</div>
       <div class="slider-row">
-        <div class="slider-meta"><span class="sl">FREQUENZA</span><span class="sv" id="vp-${i}-${j}-freq">${Math.round(p.freq)}Hz</span></div>
+        <div class="slider-meta"><span class="sl">FREQUENZA</span>${lfoBtn(i,j,'freq',p.lfo.freq,col)}<span class="sv" id="vp-${i}-${j}-freq">${Math.round(p.freq)}Hz</span></div>
         <input type="range" min="20" max="2000" step="1" value="${p.freq}" data-default="220" data-snap="step:55" oninput="setPart(${i},${j},'freq',this.value)">
       </div>
       <div class="slider-row">
-        <div class="slider-meta"><span class="sl">AMPIEZZA</span><span class="sv" id="vp-${i}-${j}-amp">${p.amp.toFixed(2)}</span></div>
+        <div class="slider-meta"><span class="sl">AMPIEZZA</span>${lfoBtn(i,j,'amp',p.lfo.amp,col)}<span class="sv" id="vp-${i}-${j}-amp">${p.amp.toFixed(2)}</span></div>
         <input type="range" min="0" max="1" step="0.01" value="${p.amp}" data-default="1" data-snap="0,0.25,0.5,0.75,1" oninput="setPart(${i},${j},'amp',this.value)">
       </div>
       <div class="slider-row">
-        <div class="slider-meta"><span class="sl">FASE</span><span class="sv" id="vp-${i}-${j}-phase">${(p.phase*2).toFixed(2)}π</span></div>
+        <div class="slider-meta"><span class="sl">FASE</span>${lfoBtn(i,j,'phase',p.lfo.phase,col)}<span class="sv" id="vp-${i}-${j}-phase">${(p.phase*2).toFixed(2)}π</span></div>
         <input type="range" min="0" max="2" step="0.01" value="${(p.phase*2).toFixed(2)}" data-default="0" data-snap="0,0.5,1,1.5,2" oninput="setPart(${i},${j},'phase',this.value)">
       </div>
     </div>`;
@@ -517,6 +558,22 @@ function renderPartials(i) {
     html += `<button class="osc-add" style="border-color:${col};color:${col}" onclick="addPartial(${i})">+ OSCILLATORE</button>`;
   box.innerHTML = html;
   enhanceSliders(box);     // editable values + snap + double-tap reset
+}
+
+function toggleLfo(i, j, key) {
+  const p = CH[i].partials[j];
+  p.lfo[key] = !p.lfo[key];
+  if (!p.lfo[key]) {
+    // restore base value when deactivated
+    const pt = AUDIO.chan[i]?.parts[j];
+    if (pt && AUDIO.ctx) {
+      const norm = partNorm(CH[i]), t = AUDIO.ctx.currentTime;
+      if (key === 'freq')  pt.osc.frequency.setTargetAtTime(p.freq, t, 0.02);
+      if (key === 'amp')   pt.gain.gain.setTargetAtTime(p.amp * norm, t, 0.02);
+      if (key === 'phase') pt.delay.delayTime.setTargetAtTime(p.phase / Math.max(1, p.freq), t, 0.02);
+    }
+  }
+  renderPartials(i);
 }
 
 function setPart(i,j,key,val) {
@@ -542,7 +599,7 @@ function setPart(i,j,key,val) {
 
 function addPartial(i) {
   if (CH[i].partials.length >= MAXPARTIALS) return;
-  CH[i].partials.push({ freq:220, amp:0.5, phase:0, waveform:"sine" });
+  CH[i].partials.push({ freq:220, amp:0.5, phase:0, waveform:"sine", lfo:{freq:false,amp:false,phase:false} });
   buildChannelSynth(i); renderPartials(i);
 }
 
