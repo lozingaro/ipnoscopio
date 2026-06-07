@@ -26,11 +26,11 @@ function findTrigger(buf, level, hyst=0.02) {
 const G = { timebase:1, noise:0, trig:0, mode:"wave", running:true };
 
 const CH = [
-  { enabled:true, src:"synth", waveform:"sine", gain:1, yOff:0, color:"#39ff14", axis:"x", inputCh:0,
-    partials:[{freq:220, amp:1, phase:0}],
+  { enabled:true, src:"synth", gain:1, yOff:0, color:"#39ff14", axis:"x", inputCh:0,
+    partials:[{freq:220, amp:1, phase:0, waveform:"sine"}],
     stream:null, micNode:null, analyser:null, micBuf:null, micOk:false },
-  { enabled:true, src:"synth", waveform:"sine", gain:1, yOff:0, color:"#00cfff", axis:"y", inputCh:1,
-    partials:[{freq:330, amp:1, phase:0}],
+  { enabled:true, src:"synth", gain:1, yOff:0, color:"#00cfff", axis:"y", inputCh:1,
+    partials:[{freq:330, amp:1, phase:0, waveform:"sine"}],
     stream:null, micNode:null, analyser:null, micBuf:null, micOk:false },
 ];
 const MAXPARTIALS = 4;
@@ -98,7 +98,7 @@ function buildChannelSynth(i) {
   const norm = partNorm(ch);
   ch.partials.forEach(p => {
     const f = p.freq;
-    const osc = ctx.createOscillator(); osc.type = oscType(ch.waveform); osc.frequency.value = f;
+    const osc = ctx.createOscillator(); osc.type = oscType(p.waveform); osc.frequency.value = f;
     const delay = ctx.createDelay(1);   delay.delayTime.value = p.phase/Math.max(1,f);
     const gain = ctx.createGain();      gain.gain.value = p.amp*norm;
     osc.connect(delay).connect(gain).connect(c.synthSum);
@@ -218,8 +218,8 @@ let t0=0;
 // additive sum of the channel's oscillators at window position u (0..timebase).
 // Each oscillator: freq (Hz, drawn as freq/CYCLE_HZ cycles), amp, phase (0..1).
 function synthAt(ch, u) {
-  const wf = WF[ch.waveform]; let s = 0;
-  for (const o of ch.partials) s += o.amp * wf(o.freq/CYCLE_HZ*u + o.phase);
+  let s = 0;
+  for (const o of ch.partials) s += o.amp * WF[o.waveform](o.freq/CYCLE_HZ*u + o.phase);
   return s * partNorm(ch);
 }
 
@@ -481,17 +481,24 @@ function setMode(m) {
 // ── Per-channel additive oscillators (internal synth only) ───────────────────
 // Each synth channel is a stack of up to MAXPARTIALS partials {ratio, amp,
 // phase} you can add/remove to experiment. The editor lives in the channel card.
+const WF_LABELS = { sine:"SENO", square:"QUADRA", sawtooth:"DENTE", triangle:"TRIANGOLO" };
+
 function renderPartials(i) {
   const box = document.getElementById("osc-ch"+i);
   if (!box) return;
   const ch = CH[i], col = ch.color;
   let html = "";
   ch.partials.forEach((p,j) => {
+    const wfBtns = Object.entries(WF_LABELS).map(([w,label]) => {
+      const a = p.waveform === w;
+      return `<button data-w="${w}" style="background:${a?col:"transparent"};color:${a?"#000":"#444"};border-color:${a?col:"#2a2a2a"};font-size:7px;padding:3px 4px" onclick="setPart(${i},${j},'waveform','${w}')">${label}</button>`;
+    }).join("");
     html += `<div class="osc" style="border-left-color:${col}">
       <div class="osc-head">
         <span class="osc-title" style="color:${col}">OSC ${j+1}</span>
         ${j>0?`<button class="osc-del" onclick="removePartial(${i},${j})" aria-label="Elimina oscillatore">RIMUOVI ✕</button>`:``}
       </div>
+      <div class="seg" style="margin-bottom:6px">${wfBtns}</div>
       <div class="slider-row">
         <div class="slider-meta"><span class="sl">FREQUENZA</span><span class="sv" id="vp-${i}-${j}-freq">${Math.round(p.freq)}Hz</span></div>
         <input type="range" min="20" max="2000" step="1" value="${p.freq}" data-default="220" data-snap="step:55" oninput="setPart(${i},${j},'freq',this.value)">
@@ -513,6 +520,13 @@ function renderPartials(i) {
 }
 
 function setPart(i,j,key,val) {
+  if (key === "waveform") {
+    CH[i].partials[j].waveform = val;
+    const pt = AUDIO.chan[i]?.parts[j];
+    if (pt?.osc) pt.osc.type = val;
+    renderPartials(i);
+    return;
+  }
   const v = parseFloat(val);
   if (key === "phase") {
     CH[i].partials[j].phase = v / 2;   // slider is 0-2π units; store as 0-1 fraction
@@ -528,7 +542,7 @@ function setPart(i,j,key,val) {
 
 function addPartial(i) {
   if (CH[i].partials.length >= MAXPARTIALS) return;
-  CH[i].partials.push({ freq:220, amp:0.5, phase:0 });
+  CH[i].partials.push({ freq:220, amp:0.5, phase:0, waveform:"sine" });
   buildChannelSynth(i); renderPartials(i);
 }
 
@@ -602,15 +616,6 @@ async function setSrc(i, btn) {
   refreshMuteBtn("ch"+i);
 }
 
-function setWave(i, btn) {
-  CH[i].waveform = btn.dataset.w;
-  AUDIO.chan[i]?.parts.forEach(pt => { if (pt.osc) pt.osc.type = oscType(CH[i].waveform); });
-  btn.closest(".seg").querySelectorAll("button").forEach(b=>{
-    const a = b===btn;
-    b.className = a?"active":"";
-    applySegStyle(b, a, CH[i].color);
-  });
-}
 
 function setAxisUI(i, val) {
   document.querySelectorAll("#axis-ch"+i+" button").forEach(b=>{

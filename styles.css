@@ -589,16 +589,21 @@ input[type=range]::-moz-range-thumb { width: 24px; height: 24px; background: var
   #stage {
     grid-area: stage;
     position: static;            /* no longer sticky: its column doesn't scroll */
-    align-self: start;
+    align-self: stretch;         /* fill the full grid cell height */
     padding: 0;
     box-shadow: none;
     min-width: 0;
+    min-height: 0;
   }
+  #screen-wrap {
+    flex: 1;                     /* grow to consume remaining height after tabs/transport */
+    min-height: 0;
+  }
+  canvas { height: 100%; }      /* fill screen-wrap */
   #controls {
     grid-area: controls;
     height: 100%;
     overflow-y: auto;
     padding: 2px 6px 24px 2px;   /* room for the scrollbar */
   }
-  canvas { height: clamp(300px, 62vh, 640px); }
 }
