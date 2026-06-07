@@ -23,18 +23,19 @@ function findTrigger(buf, level, hyst=0.02) {
 }
 
 // ── LFO defaults (defined before CH so mkLfo() is available at init) ───────
-const LFO_DEFAULTS = { rate:0, a:0.1, d:0.2, s:0.7, r:0.2 };
-const mkLfo = () => ({ ...LFO_DEFAULTS });
+const LFO_DEFAULTS = { rate:0, a:0.1, d:0.2, s:0.7, r:0.2, curve:'linear' };
+const mkLfo     = () => ({ ...LFO_DEFAULTS });
+const mkFreqLfo = () => ({ ...LFO_DEFAULTS, curve:'exp' });
 
 // ── State ──────────────────────────────────────────────────────────────────
 const G = { timebase:1, noise:0, trig:0, mode:"wave", running:true };
 
 const CH = [
   { enabled:true, src:"synth", gain:1, yOff:0, color:"#39ff14", axis:"x", inputCh:0,
-    partials:[{freq:220, amp:1, phase:0, waveform:"sine", lfo:{freq:mkLfo(),amp:mkLfo(),phase:mkLfo()}}],
+    partials:[{freq:220, amp:1, phase:0, waveform:"sine", lfo:{freq:mkFreqLfo(),amp:mkLfo(),phase:mkLfo()}}],
     stream:null, micNode:null, analyser:null, micBuf:null, micOk:false },
   { enabled:true, src:"synth", gain:1, yOff:0, color:"#00cfff", axis:"y", inputCh:1,
-    partials:[{freq:330, amp:1, phase:0, waveform:"sine", lfo:{freq:mkLfo(),amp:mkLfo(),phase:mkLfo()}}],
+    partials:[{freq:330, amp:1, phase:0, waveform:"sine", lfo:{freq:mkFreqLfo(),amp:mkLfo(),phase:mkLfo()}}],
     stream:null, micNode:null, analyser:null, micBuf:null, micOk:false },
 ];
 const MAXPARTIALS = 4;
@@ -44,14 +45,17 @@ const CYCLE_HZ = 55;     // Hz that map to one on-screen cycle (visual scaling o
 // Compute ADSR envelope value at phase phi ∈ [0,1).
 // a,d,r = fractions of cycle; s = sustain level 0..1.
 // Sustain duration fills whatever's left: max(0, 1-a-d-r).
-function adsrAt(phi, a, d, s, r) {
+function adsrAt(phi, a, d, s, r, curve) {
   const susDur = Math.max(0, 1 - a - d - r);
   const dEnd = a + d, sEnd = dEnd + susDur;
-  if (phi < a)    return a > 0 ? phi / a : 1;
-  if (phi < dEnd) return d > 0 ? 1 - (phi - a) / d * (1 - s) : s;
+  // linear t in [0,1] → shaped: exp=accelerating-up / decelerating-down
+  const up   = t => curve === 'exp' ? t * t       : t;
+  const down = t => curve === 'exp' ? (1-t)*(1-t) : (1-t);
+  if (phi < a)    return up(a > 0 ? phi / a : 1);
+  if (phi < dEnd) { const t = d > 0 ? (phi-a)/d : 1; return s + (1-s)*down(t); }
   if (phi < sEnd) return s;
-  const rPhi = phi - sEnd;
-  return r > 0 ? s - s * rPhi / r : 0;
+  const t = r > 0 ? (phi - sEnd) / r : 1;
+  return s * down(t);
 }
 
 // Returns bipolar mod value -1..1 for a given lfo object and time in seconds.
@@ -59,7 +63,7 @@ function adsrAt(phi, a, d, s, r) {
 function lfoMod(lfo, tsec) {
   if (lfo.rate <= 0) return 0;
   const phi = (tsec * lfo.rate) % 1;
-  return (adsrAt(phi, lfo.a, lfo.d, lfo.s, lfo.r) - 0.5) * 2;
+  return (adsrAt(phi, lfo.a, lfo.d, lfo.s, lfo.r, lfo.curve) - 0.5) * 2;
 }
 
 // ── ADSR canvas editor ─────────────────────────────────────────────────────
@@ -81,18 +85,20 @@ function drawAdsrCanvas(cv, lfo, col) {
   const c2 = cv.getContext('2d');
   c2.clearRect(0, 0, W, H);
   c2.fillStyle = '#111'; c2.fillRect(0, 0, W, H);
-  const pts = adsrPoints(lfo, W, H);
-  // fill under curve
-  c2.beginPath();
-  pts.forEach(([x,y],k) => k===0 ? c2.moveTo(x,y) : c2.lineTo(x,y));
-  c2.lineTo(W,H); c2.lineTo(0,H); c2.closePath();
+  // sample envelope pixel-by-pixel so exp/linear curves render accurately
+  const envY = x => (1 - adsrAt(x / W, lfo.a, lfo.d, lfo.s, lfo.r, lfo.curve)) * H;
+  // fill
+  c2.beginPath(); c2.moveTo(0, H);
+  for (let x = 0; x <= W; x++) c2.lineTo(x, envY(x));
+  c2.lineTo(W, H); c2.closePath();
   c2.fillStyle = col+'28'; c2.fill();
-  // envelope line
+  // line
   c2.beginPath();
-  pts.forEach(([x,y],k) => k===0 ? c2.moveTo(x,y) : c2.lineTo(x,y));
+  for (let x = 0; x <= W; x++) { const y = envY(x); x===0 ? c2.moveTo(x,y) : c2.lineTo(x,y); }
   c2.strokeStyle = col; c2.lineWidth = 1.5;
   c2.shadowColor = col; c2.shadowBlur = 4; c2.stroke(); c2.shadowBlur = 0;
   // draggable nodes P1 P2 P3
+  const pts = adsrPoints(lfo, W, H);
   c2.fillStyle = col; c2.strokeStyle = '#111'; c2.lineWidth = 1.5;
   pts.slice(1,4).forEach(([x,y]) => {
     c2.beginPath(); c2.rect(x-5,y-5,10,10); c2.fill(); c2.stroke();
@@ -647,15 +653,37 @@ function lfoPanel(i, j, param, lfo, col) {
   const rateTxt = active ? lfo.rate.toFixed(1)+'Hz' : 'OFF';
   const rateCol = active ? `style="color:${col}"` : '';
   const hide    = active ? '' : ' lfo-adsr-hidden';
+  const curveBtns = ['linear','exp'].map(c => {
+    const a = (lfo.curve||'linear') === c;
+    const bg = a ? col : 'transparent', fg = a ? '#000' : '#555', bc = a ? col : '#333';
+    return `<button id="lfo-curve-${i}-${j}-${param}-${c}" onclick="setLfoCurve(${i},${j},'${param}','${c}')" style="font-size:6px;padding:2px 5px;background:${bg};color:${fg};border:1px solid ${bc};cursor:pointer">${c==='exp'?'EXP':'LIN'}</button>`;
+  }).join('');
 
   return `<div class="slider-row lfo-row">
       <div class="slider-meta"><span class="sl lfo-sl">~ LFO</span><span class="sv lfo-sv" id="vp-${i}-${j}-lfo-${param}" ${rateCol}>${rateTxt}</span></div>
       <input type="range" class="lfo-range" min="0" max="10" step="0.1" value="${lfo.rate}" data-default="0" oninput="setLfoRate(${i},${j},'${param}',this.value)">
     </div>
     <div class="lfo-adsr${hide}" id="lfo-adsr-${i}-${j}-${param}">
+      <div style="display:flex;justify-content:flex-end;gap:4px;margin-bottom:3px">${curveBtns}</div>
       <canvas class="adsr-canvas" id="adsr-cv-${i}-${j}-${param}"
         data-osc="${j}" data-param="${param}" width="280" height="60"></canvas>
     </div>`;
+}
+
+function setLfoCurve(i, j, param, curve) {
+  const lfo = CH[i].partials[j].lfo[param];
+  lfo.curve = curve;
+  const col = CH[i].color;
+  ['linear','exp'].forEach(c => {
+    const btn = document.getElementById(`lfo-curve-${i}-${j}-${param}-${c}`);
+    if (!btn) return;
+    const a = c === curve;
+    btn.style.background = a ? col : 'transparent';
+    btn.style.color      = a ? '#000' : '#555';
+    btn.style.borderColor = a ? col : '#333';
+  });
+  const cv = document.getElementById(`adsr-cv-${i}-${j}-${param}`);
+  if (cv) drawAdsrCanvas(cv, lfo, col);
 }
 
 function renderPartials(i) {
@@ -740,7 +768,7 @@ function setPart(i,j,key,val) {
 
 function addPartial(i) {
   if (CH[i].partials.length >= MAXPARTIALS) return;
-  CH[i].partials.push({ freq:220, amp:0.5, phase:0, waveform:"sine", lfo:{freq:mkLfo(),amp:mkLfo(),phase:mkLfo()} });
+  CH[i].partials.push({ freq:220, amp:0.5, phase:0, waveform:"sine", lfo:{freq:mkFreqLfo(),amp:mkLfo(),phase:mkLfo()} });
   buildChannelSynth(i); renderPartials(i);
 }
 
@@ -1149,17 +1177,17 @@ async function updateFavicon() {
   link.type = 'image/png';
   link.href = cv.toDataURL('image/png');
 
-  // header wave: transparent background, 2 cycles
+  // header logo wave: transparent background, 2 cycles, fits small canvas
   const hw = document.getElementById('header-wave');
   if (hw) {
     const W = hw.width, H = hw.height;
     const hc = hw.getContext('2d');
     hc.clearRect(0, 0, W, H);
     hc.strokeStyle = col; hc.lineWidth = 1.5;
-    hc.shadowColor = col; hc.shadowBlur = 3;
+    hc.shadowColor = col; hc.shadowBlur = 2;
     hc.beginPath();
     for (let x = 0; x <= W; x++) {
-      const y = H / 2 - fn(x / W * 2) * (H / 2 - 3);
+      const y = H / 2 - fn(x / W * 2) * (H / 2 - 1);
       x === 0 ? hc.moveTo(x, y) : hc.lineTo(x, y);
     }
     hc.stroke();
