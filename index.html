@@ -22,6 +22,27 @@
     <canvas id="header-wave" width="72" height="42"></canvas>
     <span id="title">IPNOSCOPIO</span>
   </div>
+  <button id="btn-menu" onclick="toggleMenu()" aria-label="Menu">
+    <span></span><span></span><span></span>
+  </button>
+</div>
+
+<!-- dropdown menu -->
+<div id="menu-dropdown" class="hidden">
+  <a href="https://www.paypal.me/StefanoZingaro" target="_blank" rel="noopener" class="menu-item">OFFRIMI UN CAFFE</a>
+  <button class="menu-item" onclick="openCommentModal()">LASCIA UN COMMENTO</button>
+</div>
+
+<!-- comment modal -->
+<div id="comment-modal" class="hidden" onclick="if(event.target===this)closeCommentModal()">
+  <div id="comment-box">
+    <span id="comment-title">LASCIA UN COMMENTO</span>
+    <textarea id="comment-text" placeholder="Scrivi qui il tuo messaggio..."></textarea>
+    <div id="comment-actions">
+      <button onclick="closeCommentModal()">ANNULLA</button>
+      <button id="btn-invia" onclick="submitComment()">INVIA</button>
+    </div>
+  </div>
 </div>
 
 <!-- Sticky stage: screen + mode tabs + transport stay visible while controls scroll -->
@@ -200,11 +221,7 @@
 </div>
 
 <footer id="footer">
-  <a href="https://www.paypal.me/StefanoZingaro" target="_blank" rel="noopener" class="footer-link">OFFRI UN CAFFE</a>
-  <span class="footer-sep">·</span>
-  <a href="https://github.com/lozingaro/ipnoscopio/issues" target="_blank" rel="noopener" class="footer-link">LASCIA UN COMMENTO</a>
-  <span class="footer-sep">·</span>
-  <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener" class="footer-link footer-cc">CC BY-SA 4.0</a>
+  <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener" class="footer-link">CC BY-SA 4.0</a>
 </footer>
 
 <script src="app.js"></script>

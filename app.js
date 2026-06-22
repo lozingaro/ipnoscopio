@@ -1120,6 +1120,44 @@ window.addEventListener("load", ()=>{
 // Fetches current temperature + WMO weather code from Open-Meteo (no key).
 // Temperature → fill colour; weather code → waveform shape.
 // Geolocation with 4s timeout; falls back to Milan if denied or unavailable.
+// ── Menu panino ────────────────────────────────────────────────────────────
+function toggleMenu() {
+  const d = document.getElementById('menu-dropdown');
+  d.classList.toggle('hidden');
+  document.addEventListener('pointerdown', function outside(e) {
+    if (!d.contains(e.target) && e.target.id !== 'btn-menu') {
+      d.classList.add('hidden');
+      document.removeEventListener('pointerdown', outside);
+    }
+  });
+}
+
+function openCommentModal() {
+  document.getElementById('menu-dropdown').classList.add('hidden');
+  document.getElementById('comment-modal').classList.remove('hidden');
+  document.getElementById('comment-text').focus();
+}
+
+function closeCommentModal() {
+  document.getElementById('comment-modal').classList.add('hidden');
+  document.getElementById('comment-text').value = '';
+}
+
+function submitComment() {
+  const text = document.getElementById('comment-text').value.trim();
+  if (!text) return;
+  const url = 'https://github.com/lozingaro/ipnoscopio/issues/new'
+    + '?title=' + encodeURIComponent('Commento da Ipnoscopio')
+    + '&body='  + encodeURIComponent(text);
+  window.open(url, '_blank', 'noopener');
+  closeCommentModal();
+}
+
+// ESC closes modal
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeCommentModal();
+});
+
 async function updateFavicon() {
   let lat = 45.46, lon = 9.19;   // fallback: Milan
   try {
