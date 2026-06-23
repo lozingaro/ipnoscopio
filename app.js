@@ -28,7 +28,7 @@ const mkLfo     = () => ({ ...LFO_DEFAULTS });
 const mkFreqLfo = () => ({ ...LFO_DEFAULTS, curve:'exp' });
 
 // ── State ──────────────────────────────────────────────────────────────────
-const G = { timebase:1, noise:0, trig:0, mode:"wave", running:true };
+const G = { timebase:1, noise:0, trig:0, mode:"wave", running:true, smooth:0, lpf:0 };
 
 const CH = [
   { enabled:true, src:"synth", gain:1, yOff:0, color:"#39ff14", axis:"x", inputCh:0,
@@ -368,6 +368,18 @@ function getMicBuf(ch) {
   return ch.micBuf;
 }
 
+// Single-pole IIR low-pass: alpha=1 → bypass, alpha→0 → heavy smoothing.
+// Applied to synth and mic; "input" (LINEA) is left untouched.
+function lpfSamples(arr) {
+  if (G.lpf <= 0) return arr;
+  const alpha = 1 - Math.min(G.lpf / 10, 1) * 0.93;   // 0.07 .. 1.0
+  const out = new Float32Array(arr.length);
+  out[0] = arr[0];
+  for (let i = 1; i < arr.length; i++)
+    out[i] = alpha * arr[i] + (1 - alpha) * out[i - 1];
+  return out;
+}
+
 // returns array of values -1..1 for the scope render
 function getWaveSamples(ch, n) {
   if (ch.src==="mic" || ch.src==="input") {
@@ -380,14 +392,14 @@ function getWaveSamples(ch, n) {
     start = Math.max(0, Math.min(start, buf.length - win));
     const out = new Float32Array(n);
     for (let i=0;i<n;i++) out[i] = (buf[start + Math.floor(i/n*win)]||0)*ch.gain;
-    return out;
+    return ch.src === "input" ? out : lpfSamples(out);
   } else {
     // synth: additive oscillators (each at its own Hz). Drives the figure; the
     // audio bank plays the same oscillators. GUADAGNO scales it like the others.
     const out = new Float32Array(n);
     const drift = t0*0.0001;                 // slow rotation so it isn't frozen
     for (let i=0;i<n;i++) out[i] = synthAt(ch, (i/n)*G.timebase + drift)*ch.gain;
-    return out;
+    return lpfSamples(out);
   }
 }
 
@@ -435,14 +447,39 @@ function drawXY() {
   paintXY(pts, colA, colB);
 }
 
-// stroke the X-Y figure in the channel-colour gradient (no transforms)
+// Build a smooth path through pts using Catmull-Rom → cubic Bezier.
+// tension: 0=straight lines, 1=full Catmull-Rom (0.5 is the classic default).
+function catmullRomPath(ctx, pts, tension) {
+  if (pts.length < 2) return;
+  ctx.moveTo(pts[0][0], pts[0][1]);
+  const n = pts.length;
+  for (let i = 0; i < n - 1; i++) {
+    const p0 = pts[Math.max(0, i - 1)];
+    const p1 = pts[i];
+    const p2 = pts[i + 1];
+    const p3 = pts[Math.min(n - 1, i + 2)];
+    const t = tension / 3;
+    ctx.bezierCurveTo(
+      p1[0] + (p2[0] - p0[0]) * t, p1[1] + (p2[1] - p0[1]) * t,
+      p2[0] - (p3[0] - p1[0]) * t, p2[1] - (p3[1] - p1[1]) * t,
+      p2[0], p2[1]
+    );
+  }
+}
+
+// stroke the X-Y figure in the channel-colour gradient
 function paintXY(pts, colA, colB) {
   const grad = offCtx.createLinearGradient(0,0,W,H);
   grad.addColorStop(0, colA); grad.addColorStop(1, colB);
   const glowCol = blendHex(colA, colB);
+  const tension = G.smooth / 10;   // 0 = lineTo, 1 = Catmull-Rom
   const path = lw => {
     offCtx.beginPath();
-    pts.forEach(([px,py],i)=>{ i?offCtx.lineTo(px,py):offCtx.moveTo(px,py); });
+    if (tension > 0) {
+      catmullRomPath(offCtx, pts, tension);
+    } else {
+      pts.forEach(([px,py],i)=>{ i?offCtx.lineTo(px,py):offCtx.moveTo(px,py); });
+    }
     offCtx.lineWidth=lw; offCtx.stroke();
   };
   offCtx.shadowBlur=0; offCtx.strokeStyle=glowCol+"33"; path(4);
@@ -626,6 +663,18 @@ function populateInputChannels(i) {
 
 
 // ── Controls ───────────────────────────────────────────────────────────────
+function setSmooth(v) {
+  G.smooth = +v;
+  const el = document.getElementById('v-smooth');
+  if (el) el.textContent = (+v).toFixed(1);
+}
+
+function setLpf(v) {
+  G.lpf = +v;
+  const el = document.getElementById('v-lpf');
+  if (el) el.textContent = (+v).toFixed(1);
+}
+
 function setMode(m) {
   G.mode = m;
   ["wave","xy"].forEach(id => {
