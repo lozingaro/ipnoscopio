@@ -1210,13 +1210,7 @@ document.addEventListener('keydown', e => {
 });
 
 async function updateFavicon() {
-  let lat = 45.46, lon = 9.19;   // fallback: Milan
-  try {
-    const pos = await new Promise((res, rej) =>
-      navigator.geolocation.getCurrentPosition(res, rej, { timeout:4000, maximumAge:3600000 }));
-    lat = pos.coords.latitude;
-    lon = pos.coords.longitude;
-  } catch(e) {}
+  const lat = 44.49, lon = 11.34;  // Bologna
 
   let temp = 15, code = 0;
   try {
