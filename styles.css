@@ -19,7 +19,7 @@ html, body {
   background: var(--bg);
   color: var(--ink);
   font-family: 'Press Start 2P', 'Courier New', monospace;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 /* The page itself (html) is the scroller. Keep overflow-x hidden HERE, not on
@@ -92,7 +92,7 @@ body {
   display: block;
   padding: 12px 20px;
   font-family: inherit;
-  font-size: 8px;
+  font-size: 9px;
   letter-spacing: 1px;
   color: var(--bg);
   background: transparent;
@@ -801,7 +801,7 @@ input[type=range]::-moz-range-thumb { width: 24px; height: 24px; background: var
   align-items: center;
   padding: 8px 10px;
   background: var(--ink);
-  font-size: 7px;
+  font-size: 8px;
   letter-spacing: 1px;
 }
 .footer-link {
@@ -850,7 +850,7 @@ input[type=range]::-moz-range-thumb { width: 24px; height: 24px; background: var
   line-height: 1.4;
 }
 .page-sub {
-  font-size: 7px;
+  font-size: 8px;
   letter-spacing: 0.5px;
   color: var(--ink);
   opacity: 0.55;
@@ -858,7 +858,7 @@ input[type=range]::-moz-range-thumb { width: 24px; height: 24px; background: var
   line-height: 2;
 }
 .page-h2 {
-  font-size: 8px;
+  font-size: 9px;
   letter-spacing: 1.5px;
   color: var(--ink);
   border-left: 4px solid var(--yellow);
@@ -872,7 +872,7 @@ input[type=range]::-moz-range-thumb { width: 24px; height: 24px; background: var
   gap: 10px;
 }
 .page-block p, .page-block li {
-  font-size: 7px;
+  font-size: 9px;
   letter-spacing: 0.4px;
   line-height: 2.2;
   color: var(--ink);
@@ -895,17 +895,17 @@ input[type=range]::-moz-range-thumb { width: 24px; height: 24px; background: var
   margin-bottom: 14px;
 }
 .page-credit-who {
-  font-size: 6px;
+  font-size: 8px;
   letter-spacing: 1px;
   opacity: 0.5;
 }
 .page-credit-what {
-  font-size: 8px;
+  font-size: 9px;
   letter-spacing: 1px;
   color: var(--ink);
 }
 .page-credit-link {
-  font-size: 6px;
+  font-size: 8px;
   letter-spacing: 0.5px;
   color: var(--ink);
   opacity: 0.6;
@@ -917,7 +917,7 @@ input[type=range]::-moz-range-thumb { width: 24px; height: 24px; background: var
 .page-btn {
   display: inline-block;
   font-family: inherit;
-  font-size: 7px;
+  font-size: 8px;
   letter-spacing: 1px;
   padding: 10px 16px;
   background: var(--ink);
