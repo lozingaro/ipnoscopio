@@ -45,6 +45,8 @@
   </div>
 </div>
 
+<div id="onboarding-hint"><a href="guide.html" id="onboarding-link">PRIMA VOLTA? → COME FUNZIONA</a></div>
+
 <!-- Sticky stage: screen + mode tabs + transport stay visible while controls scroll -->
 <div id="stage">
   <div id="screen-wrap">
@@ -83,7 +85,7 @@
     </div>
 
     <div>
-      <span class="sl" style="font-size:9px;letter-spacing:1px;color:#444">SORGENTE</span>
+      <span class="sl">SORGENTE</span>
       <div class="seg" style="margin-top:4px" id="src-ch0">
         <button class="active" data-v="synth" onclick="setSrc(0,this)">SINTETIZZATORE</button>
         <button data-v="mic" onclick="setSrc(0,this)">MICROFONO</button>
@@ -97,7 +99,7 @@
     </div>
 
     <div id="line-ch0" style="display:none">
-      <span class="sl" style="font-size:9px;letter-spacing:1px;color:#444">DISPOSITIVO</span>
+      <span class="sl">DISPOSITIVO</span>
       <select id="input-device-ch0" class="input-device" style="margin-top:4px"></select>
       <span class="sl" style="font-size:9px;letter-spacing:1px;color:#444;display:block;margin-top:8px">INGRESSO</span>
       <select id="input-ch-ch0" class="input-device" style="margin-top:4px"></select>
@@ -110,7 +112,7 @@
         <input type="range" id="sl-yoff-ch0" min="-2" max="2" step="0.1" value="0" data-default="0" data-snap="-2,-1,0,1,2">
       </div>
       <div id="axis-row-ch0" style="display:none">
-        <span class="sl" style="font-size:9px;letter-spacing:1px;color:#444">ASSE (X-Y)</span>
+        <span class="sl">ASSE (X-Y)</span>
         <div class="seg" style="margin-top:4px" id="axis-ch0">
           <button class="active" data-v="x" onclick="setAxis(0,this)">X</button>
           <button data-v="y" onclick="setAxis(0,this)">Y</button>
@@ -132,7 +134,7 @@
     </div>
 
     <div>
-      <span class="sl" style="font-size:9px;letter-spacing:1px;color:#444">SORGENTE</span>
+      <span class="sl">SORGENTE</span>
       <div class="seg" style="margin-top:4px" id="src-ch1">
         <button class="active" data-v="synth" onclick="setSrc(1,this)">SINTETIZZATORE</button>
         <button data-v="mic" onclick="setSrc(1,this)">MICROFONO</button>
@@ -146,7 +148,7 @@
     </div>
 
     <div id="line-ch1" style="display:none">
-      <span class="sl" style="font-size:9px;letter-spacing:1px;color:#444">DISPOSITIVO</span>
+      <span class="sl">DISPOSITIVO</span>
       <select id="input-device-ch1" class="input-device" style="margin-top:4px"></select>
       <span class="sl" style="font-size:9px;letter-spacing:1px;color:#444;display:block;margin-top:8px">INGRESSO</span>
       <select id="input-ch-ch1" class="input-device" style="margin-top:4px"></select>
@@ -159,7 +161,7 @@
         <input type="range" id="sl-yoff-ch1" min="-2" max="2" step="0.1" value="0" data-default="0" data-snap="-2,-1,0,1,2">
       </div>
       <div id="axis-row-ch1" style="display:none">
-        <span class="sl" style="font-size:9px;letter-spacing:1px;color:#444">ASSE (X-Y)</span>
+        <span class="sl">ASSE (X-Y)</span>
         <div class="seg" style="margin-top:4px" id="axis-ch1">
           <button data-v="x" onclick="setAxis(1,this)">X</button>
           <button class="active" data-v="y" onclick="setAxis(1,this)">Y</button>
@@ -179,7 +181,7 @@
     <div class="mix-strip mix-master">
       <div class="mix-head">
         <span class="mix-name">MASTER</span>
-        <button class="mix-mute" id="mute-master" onclick="mixMasterMute()">SUONA</button>
+        <button class="mix-mute" id="mute-master" onclick="mixMasterMute()">ATTIVO</button>
       </div>
       <div class="slider-row">
         <div class="slider-meta"><span class="sl mix-sl">VOLUME</span><span class="sv mix-sv" id="vv-master">0.70</span></div>
@@ -190,7 +192,7 @@
     <div class="mix-strip">
       <div class="mix-head">
         <span class="mix-name" id="mixname-ch0">CANALE UNO · L</span>
-        <button class="mix-mute muted" id="mute-ch0" onclick="mixChanMute(0)">ZITTO</button>
+        <button class="mix-mute muted" id="mute-ch0" onclick="mixChanMute(0)">MUTO</button>
       </div>
       <div class="slider-row">
         <div class="slider-meta"><span class="sl mix-sl">GUADAGNO</span><span class="sv mix-sv" id="v-gain-ch0">×1.0</span></div>
@@ -205,7 +207,7 @@
     <div class="mix-strip">
       <div class="mix-head">
         <span class="mix-name" id="mixname-ch1">CANALE DUE · R</span>
-        <button class="mix-mute muted" id="mute-ch1" onclick="mixChanMute(1)">ZITTO</button>
+        <button class="mix-mute muted" id="mute-ch1" onclick="mixChanMute(1)">MUTO</button>
       </div>
       <div class="slider-row">
         <div class="slider-meta"><span class="sl mix-sl">GUADAGNO</span><span class="sv mix-sv" id="v-gain-ch1">×1.0</span></div>

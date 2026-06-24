@@ -302,7 +302,7 @@ function refreshMuteBtn(key) {
   const muted = key==="master" ? AUDIO.masterMute : AUDIO.chan[+key.slice(2)].mute;
   const btn = document.getElementById("mute-"+key);
   if (!btn) return;
-  btn.textContent = muted ? "ZITTO" : "SUONA";
+  btn.textContent = muted ? "MUTO" : "ATTIVO";
   btn.classList.toggle("muted", muted);
 }
 
