@@ -11,6 +11,7 @@
 
 <div id="header">
   <div id="header-logo">
+    <canvas id="header-wave" width="72" height="42"></canvas>
     <a href="index.html" id="title" style="text-decoration:none;color:inherit">IPNOSCOPIO</a>
   </div>
   <button id="btn-menu" onclick="toggleMenu()" aria-label="Menu">
@@ -91,35 +92,6 @@
   <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener" class="footer-link">CC BY-SA 4.0</a>
 </footer>
 
-<script>
-function toggleMenu() {
-  const d = document.getElementById('menu-dropdown');
-  d.classList.toggle('hidden');
-  document.addEventListener('pointerdown', function outside(e) {
-    if (!d.contains(e.target) && e.target.id !== 'btn-menu') {
-      d.classList.add('hidden');
-      document.removeEventListener('pointerdown', outside);
-    }
-  });
-}
-function openCommentModal() {
-  document.getElementById('comment-modal').classList.remove('hidden');
-  document.getElementById('comment-text').focus();
-}
-function closeCommentModal() {
-  document.getElementById('comment-modal').classList.add('hidden');
-  document.getElementById('comment-text').value = '';
-}
-function submitComment() {
-  const text = document.getElementById('comment-text').value.trim();
-  if (!text) return;
-  const url = 'https://github.com/lozingaro/ipnoscopio/issues/new'
-    + '?title=' + encodeURIComponent('Commento da Ipnoscopio')
-    + '&body='  + encodeURIComponent(text);
-  window.open(url, '_blank', 'noopener');
-  closeCommentModal();
-}
-document.addEventListener('keydown', e => { if (e.key === 'Escape') closeCommentModal(); });
-</script>
+<script src="nav.js"></script>
 </body>
 </html>
