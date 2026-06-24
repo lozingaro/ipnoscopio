@@ -933,3 +933,25 @@ input[type=range]::-moz-range-thumb { width: 24px; height: 24px; background: var
   color: var(--ink);
 }
 .page-btn-outline:hover { background: rgba(0,0,0,0.06); }
+
+/* ── Ipnorospo dedication ── */
+.page-dedica { align-items: center; text-align: center; gap: 14px; }
+.hypnotoad-img {
+  display: block;
+  width: min(260px, 80vw);
+  image-rendering: pixelated;
+  border: 3px solid var(--ink);
+  box-shadow: var(--shadow);
+  filter: hue-rotate(90deg) saturate(1.4);
+}
+.dedica-text {
+  font-size: 9px !important;
+  letter-spacing: 1px;
+  line-height: 2.2;
+}
+.dedica-subtext {
+  font-size: 8px !important;
+  letter-spacing: 2px;
+  opacity: 0.55;
+  font-style: italic;
+}
