@@ -958,11 +958,10 @@ input[type=range]::-moz-range-thumb { width: 24px; height: 24px; background: var
 .page-dedica { align-items: center; text-align: center; gap: 14px; }
 .hypnotoad-img {
   display: block;
-  width: min(260px, 80vw);
-  image-rendering: pixelated;
+  width: min(280px, 80vw);
+  height: auto;
   border: 3px solid var(--ink);
   box-shadow: var(--shadow);
-  filter: hue-rotate(90deg) saturate(1.4);
 }
 .dedica-text {
   font-size: 9px !important;
