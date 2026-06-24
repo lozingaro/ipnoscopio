@@ -1181,6 +1181,15 @@ function toggleMenu() {
   });
 }
 
+function openPage(id) {
+  document.getElementById('menu-dropdown').classList.add('hidden');
+  document.getElementById('page-' + id).classList.remove('hidden');
+}
+
+function closePage(id) {
+  document.getElementById('page-' + id).classList.add('hidden');
+}
+
 function openCommentModal() {
   document.getElementById('menu-dropdown').classList.add('hidden');
   document.getElementById('comment-modal').classList.remove('hidden');
@@ -1202,9 +1211,11 @@ function submitComment() {
   closeCommentModal();
 }
 
-// ESC closes modal
+// ESC closes modal and pages
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') closeCommentModal();
+  if (e.key !== 'Escape') return;
+  closeCommentModal();
+  ['about','guide'].forEach(closePage);
 });
 
 async function updateFavicon() {

@@ -804,3 +804,126 @@ input[type=range]::-moz-range-thumb { width: 24px; height: 24px; background: var
   opacity: 0.6;
 }
 .footer-link:hover { opacity: 1; }
+
+/* ── Page overlays (ABOUT / GUIDA) ── */
+.page-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  background: var(--bg);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.page-overlay.hidden { display: none; }
+
+.page-inner {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 24px 16px 60px;
+}
+
+.page-close {
+  display: block;
+  font-family: inherit;
+  font-size: 7px;
+  letter-spacing: 1px;
+  background: var(--ink);
+  color: var(--bg);
+  border: none;
+  padding: 8px 14px;
+  cursor: pointer;
+  margin-bottom: 32px;
+}
+.page-close:hover { background: #333; }
+
+.page-h1 {
+  font-size: 16px;
+  letter-spacing: 2px;
+  color: var(--ink);
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+.page-sub {
+  font-size: 7px;
+  letter-spacing: 0.5px;
+  color: var(--ink);
+  opacity: 0.55;
+  margin-bottom: 32px;
+  line-height: 2;
+}
+.page-h2 {
+  font-size: 8px;
+  letter-spacing: 1.5px;
+  color: var(--ink);
+  border-left: 4px solid var(--yellow);
+  padding-left: 8px;
+  margin-bottom: 14px;
+}
+.page-block {
+  margin-bottom: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.page-block p, .page-block li {
+  font-size: 7px;
+  letter-spacing: 0.4px;
+  line-height: 2.2;
+  color: var(--ink);
+}
+.page-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-left: 10px;
+}
+.page-list li::before { content: "— "; }
+
+.page-credit {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  border-left: 2px solid #ccc;
+  padding-left: 10px;
+  margin-bottom: 14px;
+}
+.page-credit-who {
+  font-size: 6px;
+  letter-spacing: 1px;
+  opacity: 0.5;
+}
+.page-credit-what {
+  font-size: 8px;
+  letter-spacing: 1px;
+  color: var(--ink);
+}
+.page-credit-link {
+  font-size: 6px;
+  letter-spacing: 0.5px;
+  color: var(--ink);
+  opacity: 0.6;
+  text-decoration: none;
+}
+.page-credit-link:hover { opacity: 1; text-decoration: underline; }
+
+.page-action-block { gap: 14px; }
+.page-btn {
+  display: inline-block;
+  font-family: inherit;
+  font-size: 7px;
+  letter-spacing: 1px;
+  padding: 10px 16px;
+  background: var(--ink);
+  color: var(--bg);
+  border: 2px solid var(--ink);
+  cursor: pointer;
+  text-decoration: none;
+  text-align: center;
+}
+.page-btn:hover { background: #333; }
+.page-btn-outline {
+  background: transparent;
+  color: var(--ink);
+}
+.page-btn-outline:hover { background: rgba(0,0,0,0.06); }
