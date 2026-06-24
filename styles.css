@@ -976,28 +976,14 @@ input[type=range]::-moz-range-thumb { width: 24px; height: 24px; background: var
   font-style: italic;
 }
 
-/* ── Back button ── */
+/* ── Back link ── */
 .btn-back {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-family: inherit;
-  font-size: 9px;
+  display: inline-block;
+  font-size: 8px;
   letter-spacing: 1px;
-  padding: 12px 18px;
-  background: var(--yellow);
   color: var(--ink);
-  border: var(--border);
-  box-shadow: var(--shadow);
   text-decoration: none;
-  margin-bottom: 32px;
-  transition: box-shadow .1s, transform .1s;
+  margin-bottom: 28px;
+  opacity: 0.7;
 }
-.btn-back:hover {
-  box-shadow: 6px 6px 0 var(--ink);
-  transform: translate(-1px, -1px);
-}
-.btn-back:active {
-  box-shadow: 2px 2px 0 var(--ink);
-  transform: translate(1px, 1px);
-}
+.btn-back:hover { opacity: 1; text-decoration: underline; }
