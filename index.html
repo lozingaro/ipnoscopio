@@ -29,8 +29,8 @@
 
 <!-- dropdown menu -->
 <div id="menu-dropdown" class="hidden">
-  <button class="menu-item" onclick="openPage('about')">ABOUT</button>
-  <button class="menu-item" onclick="openPage('guide')">GUIDA ALL'USO</button>
+  <a href="about.html" class="menu-item">A PROPOSITO</a>
+  <a href="guide.html" class="menu-item">COME FUNZIONA</a>
 </div>
 
 <!-- comment modal -->
@@ -41,119 +41,6 @@
     <div id="comment-actions">
       <button onclick="closeCommentModal()">ANNULLA</button>
       <button id="btn-invia" onclick="submitComment()">INVIA</button>
-    </div>
-  </div>
-</div>
-
-<!-- ── ABOUT page ─────────────────────────────────────────────────────────── -->
-<div id="page-about" class="page-overlay hidden">
-  <div class="page-inner">
-    <button class="page-close" onclick="closePage('about')">✕ CHIUDI</button>
-
-    <h1 class="page-h1">IPNOSCOPIO</h1>
-    <p class="page-sub">ovvero: come guardare i suoni senza farsi del male</p>
-
-    <div class="page-block">
-      <p>Questo aggeggio è un <strong>oscilloscopio analogico simulato</strong>. Cioè quella roba con lo schermo verde che nei film appare sempre nel momento in cui il protagonista capisce qualcosa di molto importante sull'elettricità.</p>
-      <p>Qui non capirai niente di importante. Però i disegni sono belli.</p>
-    </div>
-
-    <div class="page-block">
-      <h2 class="page-h2">CHI HA FATTO QUESTA COSA</h2>
-      <p>Ipnoscopio nasce da un progetto di <strong>sperimentazione sonora</strong> portato avanti da <strong>LA BOTTEGA</strong>, un galeone pirata ormeggiato nel cuore di Bologna. La Bottega non solca i mari — solca le frequenze. E ogni tanto si perde nelle basse.</p>
-    </div>
-
-    <div class="page-block">
-      <h2 class="page-h2">CREDITI E ONORI AL MERITO</h2>
-      <div class="page-credit">
-        <span class="page-credit-who">ISPIRAZIONE VISIVA E MORALE</span>
-        <span class="page-credit-what">DR. PIRA · FUMETTI DELLA GLEBA</span>
-        <a href="https://fumettidellagleba.org" target="_blank" rel="noopener" class="page-credit-link">fumettidellagleba.org</a>
-      </div>
-      <div class="page-credit">
-        <span class="page-credit-who">ISPIRAZIONE TECNICA</span>
-        <span class="page-credit-what">OSCI-RENDER · James H. Ball</span>
-        <a href="https://osci-render.com" target="_blank" rel="noopener" class="page-credit-link">osci-render.com</a>
-      </div>
-      <div class="page-credit">
-        <span class="page-credit-who">ISPIRAZIONE MUSICALE</span>
-        <span class="page-credit-what">OSCILLOSCOPE MUSIC</span>
-        <a href="https://oscilloscopemusic.com" target="_blank" rel="noopener" class="page-credit-link">oscilloscopemusic.com</a>
-      </div>
-    </div>
-
-    <div class="page-block page-action-block">
-      <h2 class="page-h2">SE TI E' PIACIUTO</h2>
-      <p>Puoi offrire qualcosa alla Bottega. Un caffè, una cena, un galeone nuovo. Tutto fa brodo.</p>
-      <a href="https://www.paypal.me/StefanoZingaro" target="_blank" rel="noopener" class="page-btn">OFFRICI QUALCOSA</a>
-      <button class="page-btn page-btn-outline" onclick="closePage('about'); openCommentModal()">LASCIA UN COMMENTO</button>
-    </div>
-  </div>
-</div>
-
-<!-- ── GUIDA page ─────────────────────────────────────────────────────────── -->
-<div id="page-guide" class="page-overlay hidden">
-  <div class="page-inner">
-    <button class="page-close" onclick="closePage('guide')">✕ CHIUDI</button>
-
-    <h1 class="page-h1">GUIDA ALL'USO</h1>
-    <p class="page-sub">per chi non vuole leggere i manuali (nessuno vuole)</p>
-
-    <div class="page-block">
-      <h2 class="page-h2">I CANALI</h2>
-      <p>Hai <strong>DUE canali</strong>. Canale Uno e Canale Due. Non si parlano ma lavorano insieme, come molti grandi ensemble musicali.</p>
-      <p>Ogni canale ha una <strong>SORGENTE</strong>:</p>
-      <ul class="page-list">
-        <li><strong>SINTETIZZATORE</strong> — genera onde da solo. Come un musicista pigro ma creativo.</li>
-        <li><strong>MICROFONO</strong> — ascolta l'ambiente. Giudica tutto quello che sente.</li>
-        <li><strong>LINEA</strong> — collegaci un cavo audio esterno e fai le cose per bene.</li>
-      </ul>
-    </div>
-
-    <div class="page-block">
-      <h2 class="page-h2">IL SINTETIZZATORE</h2>
-      <p>Ogni canale può avere fino a <strong>4 oscillatori</strong>. Ogni oscillatore vibra a modo suo:</p>
-      <ul class="page-list">
-        <li><strong>FREQUENZA</strong> — quante volte al secondo vibra (20–2000 Hz). Più alto = più acuto = più fastidioso.</li>
-        <li><strong>AMPIEZZA</strong> — quanto urla (0–1). Zero = silenzio cosmico.</li>
-        <li><strong>FASE</strong> — da dove parte nel suo ciclo. Questione filosofica.</li>
-        <li><strong>FORMA D'ONDA</strong> — SENO (morbido e rotondo), QUADRA (aggressiva e decisa), DENTE DI SEGA (acida e pungente), TRIANGOLO (gentile ma un po' nervosa).</li>
-      </ul>
-    </div>
-
-    <div class="page-block">
-      <h2 class="page-h2">GLI LFO (OSCILLATORI LENTI)</h2>
-      <p>Sotto ogni parametro c'è un <strong>mini-slider LFO</strong>. A zero è spento. Se lo alzi, il parametro comincia a muoversi da solo come se fosse posseduto.</p>
-      <p>Il <strong>canvas ADSR</strong> che appare sotto disegna la forma del movimento. Trascina i tre nodi per cambiare attacco, decadimento, sostegno e rilascio. I canali Frequenza usano una curva <strong>EXP</strong> di default — perché le frequenze si sentono meglio in scala logaritmica, come gli esseri umani.</p>
-    </div>
-
-    <div class="page-block">
-      <h2 class="page-h2">LE MODALITA'</h2>
-      <ul class="page-list">
-        <li><strong>ONDA</strong> — le onde nel tempo. Il classico. Quello che vedi nei film.</li>
-        <li><strong>X VS Y</strong> — i due canali si incrociano. Con frequenze in rapporto intero (1:2, 2:3, 3:4…) vengono le <strong>figure di Lissajous</strong>, scoperte da Jules Antoine Lissajous nel 1857, un tizio che evidentemente aveva tempo.</li>
-      </ul>
-    </div>
-
-    <div class="page-block">
-      <h2 class="page-h2">IL PANNELLO VISUALE</h2>
-      <ul class="page-list">
-        <li><strong>FLUIDITÀ</strong> — ammorbidisce le curve in modalità X VS Y usando spline Catmull-Rom. Più è alto, più le forme diventano sinuose e ipnotiche.</li>
-        <li><strong>FILTRO</strong> — leviga le forme d'onda di sintetizzatore e microfono. Trasforma le quadre taglienti in qualcosa di più umano.</li>
-      </ul>
-    </div>
-
-    <div class="page-block">
-      <h2 class="page-h2">IL MIXER</h2>
-      <p>Il <strong>MASTER</strong> decide il volume totale. <strong>GUADAGNO</strong> scala il segnale prima del fader. <strong>ZITTO</strong> muta il canale. Puoi lasciarli entrambi muti e guardare le onde in silenzio come un filosofo contemporaneo.</p>
-    </div>
-
-    <div class="page-block">
-      <h2 class="page-h2">ALTRI TASTI</h2>
-      <ul class="page-list">
-        <li><strong>GIGANTE</strong> — schermo intero. Per quando vuoi veramente perderti nell'onda.</li>
-        <li><strong>FERMA / VAI</strong> — congela o riprende l'acquisizione. Utile per catturare il momento esatto in cui l'oscilloscopio ha fatto qualcosa di bello.</li>
-      </ul>
     </div>
   </div>
 </div>

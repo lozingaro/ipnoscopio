@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Ipnoscopio · Come Funziona</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%23000'/><path d='M0 16 Q4 8 8 16 Q12 24 16 16 Q20 8 24 16 Q28 24 32 16' stroke='%2339ff14' stroke-width='2.5' fill='none'/></svg>">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body class="page-body">
+
+<div id="header">
+  <div id="header-logo">
+    <a href="index.html" id="title" style="text-decoration:none;color:inherit">IPNOSCOPIO</a>
+  </div>
+  <button id="btn-menu" onclick="toggleMenu()" aria-label="Menu">
+    <span></span><span></span><span></span>
+  </button>
+</div>
+
+<div id="menu-dropdown" class="hidden">
+  <a href="index.html"  class="menu-item">OSCILLOSCOPIO</a>
+  <a href="about.html"  class="menu-item">A PROPOSITO</a>
+  <a href="guide.html"  class="menu-item">COME FUNZIONA</a>
+</div>
+
+<div class="page-inner">
+
+  <h1 class="page-h1">COME FUNZIONA</h1>
+  <p class="page-sub">per chi non vuole leggere i manuali (nessuno vuole)</p>
+
+  <div class="page-block">
+    <h2 class="page-h2">I CANALI</h2>
+    <p>Hai <strong>DUE canali</strong>. Canale Uno e Canale Due. Non si parlano ma lavorano insieme, come molti grandi ensemble musicali.</p>
+    <p>Ogni canale ha una <strong>SORGENTE</strong>:</p>
+    <ul class="page-list">
+      <li><strong>SINTETIZZATORE</strong> — genera onde da solo. Come un musicista pigro ma creativo.</li>
+      <li><strong>MICROFONO</strong> — ascolta l'ambiente. Giudica tutto quello che sente.</li>
+      <li><strong>LINEA</strong> — collegaci un cavo audio esterno e fai le cose per bene.</li>
+    </ul>
+  </div>
+
+  <div class="page-block">
+    <h2 class="page-h2">IL SINTETIZZATORE</h2>
+    <p>Ogni canale può avere fino a <strong>4 oscillatori</strong>. Ogni oscillatore vibra a modo suo:</p>
+    <ul class="page-list">
+      <li><strong>FREQUENZA</strong> — quante volte al secondo vibra (20–2000 Hz). Più alto = più acuto = più fastidioso.</li>
+      <li><strong>AMPIEZZA</strong> — quanto urla (0–1). Zero = silenzio cosmico.</li>
+      <li><strong>FASE</strong> — da dove parte nel suo ciclo. Questione filosofica.</li>
+      <li><strong>FORMA D'ONDA</strong> — SENO (morbido e rotondo), QUADRA (aggressiva e decisa), DENTE DI SEGA (acida e pungente), TRIANGOLO (gentile ma nervosa).</li>
+    </ul>
+  </div>
+
+  <div class="page-block">
+    <h2 class="page-h2">GLI LFO</h2>
+    <p>Sotto ogni parametro c'è un <strong>mini-slider LFO</strong>. A zero è spento. Se lo alzi, il parametro comincia a muoversi da solo come se fosse posseduto.</p>
+    <p>Il <strong>canvas ADSR</strong> che appare disegna la forma del movimento. Trascina i tre nodi per cambiare attacco, decadimento, sostegno e rilascio. I canali FREQUENZA usano una curva <strong>EXP</strong> di default — perché le frequenze si sentono meglio in scala logaritmica, come gli esseri umani.</p>
+    <p>Puoi scegliere tra curva <strong>LIN</strong> (lineare, robotica) ed <strong>EXP</strong> (esponenziale, più organica) per ogni LFO.</p>
+  </div>
+
+  <div class="page-block">
+    <h2 class="page-h2">LE MODALITA'</h2>
+    <ul class="page-list">
+      <li><strong>ONDA</strong> — le onde nel tempo. Il classico. Quello che vedi nei film.</li>
+      <li><strong>X VS Y</strong> — i due canali si incrociano sugli assi. Con frequenze in rapporto intero (1:2, 2:3, 3:4…) vengono le <strong>figure di Lissajous</strong>, scoperte da Jules Antoine Lissajous nel 1857, un tizio che aveva chiaramente troppo tempo.</li>
+    </ul>
+  </div>
+
+  <div class="page-block">
+    <h2 class="page-h2">IL PANNELLO VISUALE</h2>
+    <ul class="page-list">
+      <li><strong>FLUIDITA'</strong> — in modalità X VS Y ammorbidisce le curve usando spline Catmull-Rom. Più è alto, più le figure diventano sinuose e ipnotiche.</li>
+      <li><strong>FILTRO</strong> — leviga le forme d'onda di sintetizzatore e microfono. Trasforma le quadre taglienti in qualcosa di più umano.</li>
+    </ul>
+  </div>
+
+  <div class="page-block">
+    <h2 class="page-h2">IL MIXER</h2>
+    <p>Il <strong>MASTER</strong> decide il volume totale. <strong>GUADAGNO</strong> scala il segnale prima del fader. <strong>ZITTO</strong> muta il canale. Puoi lasciarli entrambi muti e guardare le onde in silenzio come un filosofo contemporaneo.</p>
+  </div>
+
+  <div class="page-block">
+    <h2 class="page-h2">ALTRI TASTI</h2>
+    <ul class="page-list">
+      <li><strong>GIGANTE</strong> — schermo intero. Per quando vuoi veramente perderti nell'onda.</li>
+      <li><strong>FERMA / VAI</strong> — congela o riprende l'acquisizione. Utile per catturare il momento esatto in cui l'oscilloscopio ha fatto qualcosa di bello.</li>
+    </ul>
+  </div>
+
+</div>
+
+<footer id="footer">
+  <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener" class="footer-link">CC BY-SA 4.0</a>
+</footer>
+
+<script>
+function toggleMenu() {
+  const d = document.getElementById('menu-dropdown');
+  d.classList.toggle('hidden');
+  document.addEventListener('pointerdown', function outside(e) {
+    if (!d.contains(e.target) && e.target.id !== 'btn-menu') {
+      d.classList.add('hidden');
+      document.removeEventListener('pointerdown', outside);
+    }
+  });
+}
+</script>
+</body>
+</html>

@@ -751,6 +751,12 @@ input[type=range]::-moz-range-thumb { width: 24px; height: 24px; background: var
 /* ── DESKTOP: scope fixed on the left, config panel scrolls on the right ── */
 @media (min-width: 860px) {
   html { height: 100%; }
+  body.page-body {
+    display: flex;
+    flex-direction: column;
+    max-width: 700px;
+    margin: 0 auto;
+  }
   body {
     display: grid;
     grid-template-columns: 1fr 400px;

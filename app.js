@@ -1181,14 +1181,6 @@ function toggleMenu() {
   });
 }
 
-function openPage(id) {
-  document.getElementById('menu-dropdown').classList.add('hidden');
-  document.getElementById('page-' + id).classList.remove('hidden');
-}
-
-function closePage(id) {
-  document.getElementById('page-' + id).classList.add('hidden');
-}
 
 function openCommentModal() {
   document.getElementById('menu-dropdown').classList.add('hidden');
@@ -1215,7 +1207,6 @@ function submitComment() {
 document.addEventListener('keydown', e => {
   if (e.key !== 'Escape') return;
   closeCommentModal();
-  ['about','guide'].forEach(closePage);
 });
 
 async function updateFavicon() {
