@@ -30,12 +30,14 @@ const mkFreqLfo = () => ({ ...LFO_DEFAULTS, curve:'exp' });
 // ── State ──────────────────────────────────────────────────────────────────
 const G = { timebase:1, noise:0, trig:0, mode:"wave", running:true, smooth:0, lpf:0 };
 
+const mkFilter = () => ({ type:'off', freq:2000, q:1 });
+
 const CH = [
   { enabled:true, src:"synth", gain:1, yOff:0, color:"#39ff14", axis:"x", inputCh:0,
-    partials:[{freq:220, amp:1, phase:0, waveform:"sine", lfo:{freq:mkFreqLfo(),amp:mkLfo(),phase:mkLfo()}}],
+    partials:[{freq:220, amp:1, phase:0, waveform:"sine", filter:mkFilter(), lfo:{freq:mkFreqLfo(),amp:mkLfo(),phase:mkLfo()}}],
     stream:null, micNode:null, analyser:null, micBuf:null, micOk:false },
   { enabled:true, src:"synth", gain:1, yOff:0, color:"#00cfff", axis:"y", inputCh:1,
-    partials:[{freq:330, amp:1, phase:0, waveform:"sine", lfo:{freq:mkFreqLfo(),amp:mkLfo(),phase:mkLfo()}}],
+    partials:[{freq:330, amp:1, phase:0, waveform:"sine", filter:mkFilter(), lfo:{freq:mkFreqLfo(),amp:mkLfo(),phase:mkLfo()}}],
     stream:null, micNode:null, analyser:null, micBuf:null, micOk:false },
 ];
 const MAXPARTIALS = 4;
@@ -217,18 +219,33 @@ function ensureAudio() {
 function buildChannelSynth(i) {
   const ctx = AUDIO.ctx, c = AUDIO.chan[i], ch = CH[i];
   if (!ctx || !c.synthSum) return;
-  c.parts.forEach(pt => { try{pt.osc.stop();}catch(e){} try{pt.osc.disconnect();}catch(e){}
-                          try{pt.delay.disconnect();}catch(e){} try{pt.gain.disconnect();}catch(e){} });
+  c.parts.forEach(pt => {
+    try{pt.osc.stop();}catch(e){}
+    try{pt.osc.disconnect();}catch(e){}
+    try{pt.delay.disconnect();}catch(e){}
+    try{pt.biquad?.disconnect();}catch(e){}
+    try{pt.gain.disconnect();}catch(e){}
+  });
   c.parts = [];
   const norm = partNorm(ch);
   ch.partials.forEach(p => {
     const f = p.freq;
-    const osc = ctx.createOscillator(); osc.type = oscType(p.waveform); osc.frequency.value = f;
-    const delay = ctx.createDelay(1);   delay.delayTime.value = p.phase/Math.max(1,f);
-    const gain = ctx.createGain();      gain.gain.value = p.amp*norm;
-    osc.connect(delay).connect(gain).connect(c.synthSum);
+    const osc   = ctx.createOscillator(); osc.type = oscType(p.waveform); osc.frequency.value = f;
+    const delay = ctx.createDelay(1);     delay.delayTime.value = p.phase/Math.max(1,f);
+    const gain  = ctx.createGain();       gain.gain.value = p.amp*norm;
+    let biquad = null;
+    const flt = p.filter;
+    if (flt && flt.type !== 'off') {
+      biquad = ctx.createBiquadFilter();
+      biquad.type = flt.type === 'lp' ? 'lowpass' : 'highpass';
+      biquad.frequency.value = flt.freq;
+      biquad.Q.value = flt.q;
+      osc.connect(delay).connect(biquad).connect(gain).connect(c.synthSum);
+    } else {
+      osc.connect(delay).connect(gain).connect(c.synthSum);
+    }
     osc.start();
-    c.parts.push({ osc, delay, gain });
+    c.parts.push({ osc, delay, biquad, gain });
   });
 }
 
@@ -243,6 +260,10 @@ function updatePartialAudio(i) {
     pt.osc.frequency.setTargetAtTime(f, t, 0.02);
     pt.delay.delayTime.setTargetAtTime(p.phase/Math.max(1,f), t, 0.02);
     pt.gain.gain.setTargetAtTime(p.amp*norm, t, 0.02);
+    if (pt.biquad && p.filter && p.filter.type !== 'off') {
+      pt.biquad.frequency.setTargetAtTime(p.filter.freq, t, 0.02);
+      pt.biquad.Q.value = p.filter.q;
+    }
   });
 }
 
@@ -735,12 +756,30 @@ function setLfoCurve(i, j, param, curve) {
   if (cv) drawAdsrCanvas(cv, lfo, col);
 }
 
+function filterGroup(i, j, flt, col) {
+  const btns = ['off','lp','hp'].map(t => {
+    const a = flt.type === t;
+    const label = t === 'off' ? 'OFF' : t.toUpperCase();
+    return `<button onclick="setPartFilter(${i},${j},'type','${t}')" style="font-size:7px;padding:3px 7px;background:${a?col:'transparent'};color:${a?'#000':'#444'};border:1px solid ${a?col:'#aaa'};cursor:pointer;letter-spacing:1px">${label}</button>`;
+  }).join('');
+  const params = flt.type !== 'off' ? `
+    <div class="slider-row" style="margin-top:6px">
+      <div class="slider-meta"><span class="sl">TAGLIO</span><span class="sv" id="vflt-${i}-${j}-freq">${Math.round(flt.freq)}Hz</span></div>
+      <input type="range" min="20" max="8000" step="1" value="${flt.freq}" data-default="2000" oninput="setPartFilter(${i},${j},'freq',this.value)">
+    </div>` : '';
+  return `<div class="param-group filter-group">
+    <div class="param-group-head"><span class="sl">FILTRO</span><div style="display:flex;gap:4px">${btns}</div></div>
+    ${params}
+  </div>`;
+}
+
 function renderPartials(i) {
   const box = document.getElementById("osc-ch"+i);
   if (!box) return;
   const ch = CH[i], col = ch.color;
   let html = "";
   ch.partials.forEach((p,j) => {
+    const flt = p.filter || mkFilter();
     const wfBtns = Object.entries(WF_LABELS).map(([w,label]) => {
       const a = p.waveform === w;
       return `<button data-w="${w}" style="background:${a?col:"transparent"};color:${a?"#000":"#444"};border-color:${a?col:"#2a2a2a"};font-size:7px;padding:3px 4px" onclick="setPart(${i},${j},'waveform','${w}')">${label}</button>`;
@@ -751,21 +790,31 @@ function renderPartials(i) {
         ${j>0?`<button class="osc-del" onclick="removePartial(${i},${j})" aria-label="Elimina oscillatore">RIMUOVI ✕</button>`:``}
       </div>
       <div class="seg" style="margin-bottom:6px">${wfBtns}</div>
-      <div class="slider-row">
-        <div class="slider-meta"><span class="sl">FREQUENZA</span><span class="sv" id="vp-${i}-${j}-freq">${Math.round(p.freq)}Hz</span></div>
-        <input type="range" min="20" max="2000" step="1" value="${p.freq}" data-default="220" data-snap="step:55" oninput="setPart(${i},${j},'freq',this.value)">
+      <div class="param-group">
+        <span class="param-group-label">FREQUENZA</span>
+        <div class="slider-row">
+          <div class="slider-meta"><span class="sl">Hz</span><span class="sv" id="vp-${i}-${j}-freq">${Math.round(p.freq)}Hz</span></div>
+          <input type="range" min="20" max="2000" step="1" value="${p.freq}" data-default="220" data-snap="step:55" oninput="setPart(${i},${j},'freq',this.value)">
+        </div>
+        ${lfoPanel(i,j,'freq',p.lfo.freq,col)}
       </div>
-      ${lfoPanel(i,j,'freq',p.lfo.freq,col)}
-      <div class="slider-row">
-        <div class="slider-meta"><span class="sl">AMPIEZZA</span><span class="sv" id="vp-${i}-${j}-amp">${p.amp.toFixed(2)}</span></div>
-        <input type="range" min="0" max="1" step="0.01" value="${p.amp}" data-default="1" data-snap="0,0.25,0.5,0.75,1" oninput="setPart(${i},${j},'amp',this.value)">
+      <div class="param-group">
+        <span class="param-group-label">AMPIEZZA</span>
+        <div class="slider-row">
+          <div class="slider-meta"><span class="sl">vol</span><span class="sv" id="vp-${i}-${j}-amp">${p.amp.toFixed(2)}</span></div>
+          <input type="range" min="0" max="1" step="0.01" value="${p.amp}" data-default="1" data-snap="0,0.25,0.5,0.75,1" oninput="setPart(${i},${j},'amp',this.value)">
+        </div>
+        ${lfoPanel(i,j,'amp',p.lfo.amp,col)}
       </div>
-      ${lfoPanel(i,j,'amp',p.lfo.amp,col)}
-      <div class="slider-row">
-        <div class="slider-meta"><span class="sl">FASE</span><span class="sv" id="vp-${i}-${j}-phase">${(p.phase*2).toFixed(2)}π</span></div>
-        <input type="range" min="0" max="2" step="0.01" value="${(p.phase*2).toFixed(2)}" data-default="0" data-snap="0,0.5,1,1.5,2" oninput="setPart(${i},${j},'phase',this.value)">
+      <div class="param-group">
+        <span class="param-group-label">FASE</span>
+        <div class="slider-row">
+          <div class="slider-meta"><span class="sl">π</span><span class="sv" id="vp-${i}-${j}-phase">${(p.phase*2).toFixed(2)}π</span></div>
+          <input type="range" min="0" max="2" step="0.01" value="${(p.phase*2).toFixed(2)}" data-default="0" data-snap="0,0.5,1,1.5,2" oninput="setPart(${i},${j},'phase',this.value)">
+        </div>
+        ${lfoPanel(i,j,'phase',p.lfo.phase,col)}
       </div>
-      ${lfoPanel(i,j,'phase',p.lfo.phase,col)}
+      ${filterGroup(i,j,flt,col)}
     </div>`;
   });
   if (ch.partials.length < MAXPARTIALS)
@@ -817,8 +866,21 @@ function setPart(i,j,key,val) {
 
 function addPartial(i) {
   if (CH[i].partials.length >= MAXPARTIALS) return;
-  CH[i].partials.push({ freq:220, amp:0.5, phase:0, waveform:"sine", lfo:{freq:mkFreqLfo(),amp:mkLfo(),phase:mkLfo()} });
+  CH[i].partials.push({ freq:220, amp:0.5, phase:0, waveform:"sine", filter:mkFilter(), lfo:{freq:mkFreqLfo(),amp:mkLfo(),phase:mkLfo()} });
   buildChannelSynth(i); renderPartials(i);
+}
+
+function setPartFilter(i, j, param, val) {
+  const flt = CH[i].partials[j].filter;
+  if (param === 'type') {
+    flt.type = val;
+    buildChannelSynth(i); renderPartials(i);
+    return;
+  }
+  flt[param] = parseFloat(val);
+  const el = document.getElementById(`vflt-${i}-${j}-${param}`);
+  if (el) el.textContent = param === 'freq' ? Math.round(flt.freq)+'Hz' : flt.q.toFixed(1);
+  updatePartialAudio(i);
 }
 
 function removePartial(i,j) {

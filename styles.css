@@ -589,10 +589,34 @@ input[type=range]::-webkit-slider-thumb {
 input[type=range]::-moz-range-track { height: 10px; background: var(--ink); border: 2px solid var(--ink); }
 input[type=range]::-moz-range-thumb { width: 24px; height: 24px; background: var(--yellow); border: 3px solid var(--ink); border-radius: 0; }
 
+/* ── Param groups: each parameter + its LFO live in one box ── */
+.param-group {
+  border: 1px solid rgba(26,26,26,0.18);
+  background: rgba(255,255,255,0.28);
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.param-group-label {
+  font-size: 7px;
+  letter-spacing: 2px;
+  color: #555;
+  text-transform: uppercase;
+  display: block;
+  margin-bottom: 2px;
+}
+.param-group-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.filter-group { gap: 0; }
+
 /* ADSR envelope section (visible only when LFO rate > 0) */
 .lfo-adsr {
-  border-left: 2px solid rgba(255,255,255,0.1);
-  padding-left: 8px;
+  border-top: 1px dashed rgba(26,26,26,0.2);
+  padding-top: 5px;
   margin-top: 2px;
 }
 .lfo-adsr-hidden { display: none; }
@@ -606,15 +630,14 @@ input[type=range]::-moz-range-thumb { width: 24px; height: 24px; background: var
   margin-top: 2px;
 }
 
-/* LFO sub-slider (below each oscillator parameter) */
+/* LFO sub-slider (inside param-group, subordinate style) */
 .lfo-row {
-  padding-left: 8px;
-  border-left: 2px solid rgba(255,255,255,0.15);
-  margin-top: -4px;
+  padding-left: 6px;
+  border-left: 2px solid rgba(26,26,26,0.15);
 }
 .lfo-sl {
   font-size: 6px !important;
-  color: #666 !important;
+  color: #777 !important;
   letter-spacing: 1px;
 }
 .lfo-sv {
